@@ -15,13 +15,36 @@
 
 ---
 
-## Mục lục lộ trình (10 Chương)
+## Ba "cú sốc" tư duy Python -> Odoo (đọc trước C4)
+
+Học viên biết Python cơ bản thường vấp ở 3 điểm tư duy *khác biệt* sau. Mentor nên nhấn mạnh đúng lúc thay vì để học viên tự đâm vào.
+
+### 1. `self` KHÔNG phải 1 object - nó là Recordset (C4, C5)
+Python thuần: `self` = 1 instance. Odoo: `self` = **tập hợp** bản ghi (có thể 0, 1, hay 100 record - vd khi gọi từ list view, server action).
+- Triệu chứng: viết `if self.state == 'draft':` -> lỗi `Expected singleton` khi `self` chứa >1 record.
+- **Quy tắc vàng:** *"Không có `self.ensure_one()` thì PHẢI `for rec in self:`"*. Onchange là ngoại lệ (luôn 1 record).
+
+### 2. Decorator của Odoo là "trigger", không chỉ là cú pháp (C4)
+Học viên biết decorator Python, nhưng `@api.depends` / `@api.onchange` còn dính tới cơ chế **trigger tự động + cache** của ORM.
+- Triệu chứng: không hiểu vì sao đổi giá trị trên form (chưa save) mà field khác tự đổi (`onchange`), hay vì sao `compute` phải `store=True` mới search/group_by được.
+- **Mẹo mentor:** ở C4 dành ~15 phút giải thích *vòng đời trigger* (nguồn thay đổi -> Odoo gọi lại compute -> ghi cache/DB), trước khi dạy cú pháp. Đây là chương "thử lửa" số 1.
+
+### 3. `self.env` & context - "chìa khóa vạn năng" (C4 trở đi)
+Python thuần: muốn chạm DB thì viết SQL / gọi model cụ thể. Odoo: mọi thứ đi qua `self.env` (Environment) - khá trừu tượng với người mới.
+- Triệu chứng: lúng túng khi cần lấy dữ liệu bảng khác (vd `hr.employee` -> OT).
+- **Mẹo mentor:** dạy `self.env['model.name'].search([...])` và giải thích `self.env` mang theo user hiện tại, **timezone (`env.user.tz`)**, và kết nối toàn DB. Hiểu chỗ này mới xử lý đúng C8 (múi giờ).
+
+> 💡 **Chiến lược nhịp độ:** với học viên đã biết Python, có thể đẩy nhanh **C1-C2** (phần lớn là cấu trúc & cú pháp). Dồn thời gian vào **C4 (Compute/Onchange/Constrains)** và **C8 (logic múi giờ)** - đây mới là 2 chương thực sự thử thách tư duy framework.
+
+---
+
+## Mục lục lộ trình (11 Chương)
 
 | Chương | Tên chương | Nội dung cốt lõi |
 |---|---|---|
 | 1 | Khởi tạo & cấu trúc Module Odoo | `__manifest__.py`, `__init__.py`, dependencies, cài module |
 | 2 | Thiết kế Models | `models.Model`, các loại Field, quan hệ Many2one / One2many / Many2many |
-| 3 | Views, Menu & Action cơ bản | Form / Tree / Search view, `ir.actions.act_window`, `<menuitem>` |
+| 3 | Views, Menu & Action cơ bản | Form / Tree / Search view, `ir.actions.act_window`, `<menuitem>`, `ir.model.access.csv` sơ khai |
 | 4 | Compute, Onchange, Constrains | `@api.depends`, `@api.onchange`, `@api.constrains`, `store=True` |
 | 5 | Workflow trạng thái + Mail template | Statusbar, button action, `mail.template`, link `/web#id=...` |
 | 6 | Wizard từ chối + Tracking lịch sử | `TransientModel`, `mail.thread`, `tracking=True`, ẩn comment chatter |
@@ -29,6 +52,9 @@
 | 8 | Logic OT Category theo thời gian | Tự gán category theo ngày/giờ (T2-T6, T7, CN, ban đêm) |
 | 9 | UI nâng cao (decoration & button list) | `decoration-danger`, header button trên list, server action |
 | 10 | Data Migration & Hoàn thiện | Pre/post migration script, backfill `employee_display_name`, rà soát Acceptance Criteria |
+| 11 | Automated Testing | `TransactionCase`, `tests/`, `--test-enable`, test workflow + constrains |
+
+> 📎 Trước khi chạy C5 (test mail) trở đi, đọc **Phụ lục A: Setup môi trường & dữ liệu test** ở cuối tài liệu để chuẩn bị user PM/DL, project, department và outgoing mail server.
 
 ```mermaid
 flowchart LR
@@ -39,11 +65,12 @@ flowchart LR
     C5 --> C6[6. Wizard + Tracking]
     C6 --> C7[7. Security]
     C7 --> C8[8. OT Category Logic]
-    C8 --> C9[9. UI: Decoration + Random]
+    C8 --> C9[9. UI: Decoration + Button list]
     C9 --> C10[10. Migration + Acceptance]
+    C10 --> C11[11. Automated Testing]
 ```
 
-Ước lượng: ~2-3 giờ/chương cho người mới, tổng ~25-30 giờ.
+Ước lượng: ~2-3 giờ/chương cho người mới, tổng ~28-33 giờ (đã gồm C11).
 
 ---
 
@@ -233,6 +260,13 @@ class Example(models.Model):
 ### Concept 5: Tham số phổ biến
 `required`, `default`, `readonly`, `copy`, `index`, `help`, `tracking`, `groups`.
 
+**Lưu ý `copy=False`:** khi user bấm "Duplicate" (hoặc gọi `.copy()`), Odoo mặc định copy mọi field. Có những field KHÔNG nên copy:
+- `name` (mã phiếu từ sequence) -> bản sao phải sinh mã mới, không trùng.
+- `state` -> bản sao nên về `draft`, không kế thừa `approved`.
+- `submitted_at`, `pm_action_at`, `dl_action_at`, `reject_reason` -> mốc thời gian/lý do của bản gốc, copy sang là sai dữ liệu.
+
+Đặt `copy=False` cho các field này (sẽ dùng cụ thể ở C5 khi có sequence + state). Field quan hệ One2many như `line_ids` thì mặc định `copy=True` là hợp lý (copy luôn các line).
+
 ## 2.3. Ví dụ minh họa (Library Book)
 
 ```python
@@ -363,6 +397,19 @@ Paste 3 file model + `models/__init__.py`, screenshot `\dt ot_*`, trả lời 3 
 - Mỗi `<record id="...">` -> external id `<module>.<id>`.
 - Khai báo file XML trong `__manifest__.py['data']` đúng thứ tự: file định nghĩa view trước, file menu/action tham chiếu sau.
 
+### Concept 6: `ir.model.access.csv` sơ khai (bắt buộc khi có UI)
+Model mới mà KHÔNG có access rule thì: admin/superuser vẫn dùng được (nên bạn tưởng "chạy ngon"), nhưng **user thường bị `AccessError`** và Odoo bắn warning lúc load. Vì C3 bắt đầu CRUD qua UI, ta tạo 1 file access **sơ khai** (toàn quyền cho user nội bộ) - tới C7 mới tách nhỏ theo group nghiệp vụ.
+
+```csv
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_ot_request_user,access.ot.request.user,model_ot_request,base.group_user,1,1,1,1
+access_ot_request_line_user,access.ot.request.line.user,model_ot_request_line,base.group_user,1,1,1,1
+access_ot_category_user,access.ot.category.user,model_ot_category,base.group_user,1,1,1,1
+```
+
+- Cấp cho `base.group_user` (user nội bộ) là đủ; cấp `base.group_system` vô nghĩa vì admin đã có sẵn.
+- File này load **lên đầu** `data` (security trước view). C7 sẽ thay/bổ sung các dòng theo từng group.
+
 ## 3.3. Ví dụ minh họa (Library)
 
 ```xml
@@ -398,20 +445,23 @@ Paste 3 file model + `models/__init__.py`, screenshot `\dt ot_*`, trả lời 3 
    - Search: field employee/project/dept; filter theo state.
    - Action + menu.
 3. `views/ot_request_line_views.xml`: chỉ tree dùng nội bộ.
-4. Khai báo trong `__manifest__.py['data']`:
+4. `security/ir.model.access.csv` sơ khai (Concept 6): cấp full CRUD cho `base.group_user` trên 3 model.
+5. Khai báo trong `__manifest__.py['data']` (security LÊN ĐẦU):
    ```python
    'data': [
+       'security/ir.model.access.csv',
        'views/ot_category_views.xml',
        'views/ot_request_views.xml',
        'views/ot_request_line_views.xml',
    ],
    ```
-5. Upgrade -> tạo thử 1 OT Request -> save -> mở lại -> dữ liệu còn.
+6. Upgrade -> tạo thử 1 OT Request -> save -> mở lại -> dữ liệu còn. Kiểm tra terminal KHÔNG còn warning "no access rules".
 
 **Câu hỏi:**
 - (a) Tại sao file menu/action phải SAU file view? Đảo ngược thì sao?
 - (b) `editable="bottom"` ở tree con khác mặc định thế nào?
 - (c) `name` (technical) vs `string` (label) của filter khác gì nhau?
+- (d) Không có access rule, vì sao bạn (admin) vẫn CRUD được nhưng user thường thì không?
 
 ## 3.5. Cách nộp bài
 Paste 3 file XML, screenshot form OT Request, trả lời 3 câu hỏi.
@@ -515,17 +565,25 @@ Trên `ot.request`:
 2. `total_ot_hours = fields.Float(compute=..., store=True)` từ `line_ids.duration_hours`.
 3. `department_id`: `related` từ `employee_id.department_id`, `store=True`.
 4. `employee_display_name = fields.Char(compute=..., store=True)` format `<Employee Name> - <Department Name>`.
+   > 💡 **Hint - bẫy trigger:** thử nghĩ xem `@api.depends('employee_id')` sẽ chạy lại khi nào. Nếu ngày mai nhân viên đổi tên trong `hr.employee` (không đụng gì tới phiếu OT), giá trị `store=True` này có tự cập nhật không? Nếu KHÔNG mà bạn muốn nó cập nhật, `depends` cần "trỏ sâu" tới đâu? (Gợi ý: ORM chỉ bắt được thay đổi của field mà bạn *kê tên ra* trong `depends`.) Tự suy ra cú pháp - đừng vội kết luận `employee_id` là đủ.
 5. **Onchange `project_id`**: tự fill `pm_id` từ `project_id.user_id`.
 6. **Onchange `employee_id`/`department_id`**: tự fill `dl_id` (`department_id.manager_id` -> map sang user).
 7. **Constrains:**
    - `end_datetime > start_datetime` (trên line).
    - Không cho submit nếu line có `ot_date` cách hôm nay quá 2 ngày (trên `ot.request`, dùng `state`).
    - Trong cùng request, line không được trùng/đè khoảng `[start, end]`.
+8. **Micro-test (shift-left, làm quen sớm):** tạo `tests/__init__.py` + `tests/test_compute.py` với **2 test thuần, ít phụ thuộc dữ liệu**:
+   - `duration_hours`: tạo 1 line 18h00->20h30 -> assert `== 2.5`.
+   - constrains `end > start`: tạo line `end < start` -> `assertRaises(ValidationError)`.
+
+   > 🧪 Đây CHƯA phải bộ test đầy đủ - chỉ tập làm quen `TransactionCase` ngay khi vừa có logic, để "code tới đâu, bảo vệ tới đó". Bộ test workflow + category hoàn chỉnh (cần dựng nhiều dữ liệu hơn) để dành **C11**. Cách chạy `--test-enable`: xem **C11, Concept 5**.
 
 **Câu hỏi:**
 - (a) Vì sao `total_ot_hours` PHẢI `store=True`? (Hint: C9 decoration tree.)
 - (b) Constrains "quá 2 ngày" trong `@api.constrains` vs trong `action_submit` khác nhau thế nào? Cách nào tốt hơn cho UX?
 - (c) Onchange thay thế hoàn toàn được constrains không? Vì sao project này dùng cả 2?
+- (d) `employee_display_name` nên là **giá trị "sống"** (luôn theo tên hiện tại của nhân viên) hay **snapshot đóng băng** (tên/phòng ban tại lúc tạo phiếu)? Lựa chọn này quyết định `depends` nên trỏ sâu (reactive) hay chỉ set 1 lần trong `create`/`action_submit`. Bảo vệ quyết định của bạn - và đối chiếu với việc README gọi đây là "migration field" + có C10 backfill (xem C10 câu hỏi (c)).
+- (e) Nếu chọn deep depends `employee_id.department_id.name`: khi một phòng ban đổi tên, bao nhiêu bản ghi `ot.request` bị recompute? Có vấn đề performance không khi data lớn?
 
 ## 4.5. Cách nộp bài
 Paste method compute/onchange/constrains, demo case sai để thấy `ValidationError`, trả lời 3 câu hỏi.
@@ -541,6 +599,8 @@ Paste method compute/onchange/constrains, demo case sai để thấy `Validation
 - KHÔNG log mail vào chatter.
 - Sequence tự động cho `name` (vd `OT/2026/00001`).
 
+> 📎 Để gửi/nhận mail đúng luồng (PM, DL, CC employee), bạn cần user + project + department được gắn đúng và một outgoing mail server. Làm theo **Phụ lục A** trước khi test chương này.
+
 ## 5.2. Odoo Concepts cần biết
 
 ### Concept 1: Statusbar
@@ -550,7 +610,7 @@ Paste method compute/onchange/constrains, demo case sai để thấy `Validation
     <button name="action_submit" type="object" string="Submit"
             states="draft" class="oe_highlight"/>
     <button name="action_pm_approve" type="object" string="PM Approve"
-            states="pm_waiting" groups="ot_registration.group_ot_pm"/>
+            states="pm_waiting"/>
     <field name="state" widget="statusbar"
            statusbar_visible="draft,pm_waiting,dl_waiting,approved"/>
 </header>
@@ -559,6 +619,8 @@ Paste method compute/onchange/constrains, demo case sai để thấy `Validation
 - `type="object"`: gọi method Python cùng tên `name`.
 - `states="..."`: chỉ hiển thị khi state thuộc danh sách.
 - `groups="..."`: giới hạn group thấy nút.
+
+> ⚠️ **CHƯA thêm `groups="ot_registration.group_ot_pm"` ở chương này.** Group đó tới **C7** mới được tạo. Nếu tham chiếu external id chưa tồn tại, module sẽ lỗi `External ID not found` ngay lúc cài C5. Chương này chỉ dùng `states=`; để dành `groups=` cho C7 (xem C7 bài tập #3).
 
 ### Concept 2: Method action_*
 
@@ -632,7 +694,7 @@ def action_approve(self):
 
 ## 5.4. Bài tập
 
-1. Sequence `ot.request` qua `data/ot_sequence.xml`. Override `create` để gán `name`.
+1. Sequence `ot.request` qua `data/ot_sequence.xml`. Override `create` để gán `name`. Đồng thời đặt `copy=False` cho `name`, `state`, `submitted_at`, `pm_action_at`, `dl_action_at`, `reject_reason` (xem C2 Concept 5) để bản Duplicate sinh mã mới và về `draft`.
 2. Form: statusbar đầy đủ + 5 button (Submit / PM Approve / PM Reject / DL Approve / DL Reject / Reset to Draft). Chương này tạm dùng button Reject thường (C6 đổi wizard).
 3. Method:
    - `action_submit` (draft -> pm_waiting) + mail tới PM, CC employee.
@@ -663,6 +725,12 @@ Paste mail template XML + method action_*, screenshot Settings -> Email -> Email
 - Bắt buộc lý do, đẩy lý do vào mail.
 - Bật `tracking=True` cho `state`, `total_ot_hours`, `pm_id`, `dl_id`.
 - Tracking ghi audit log nhưng mail vẫn không log ở chatter dạng comment.
+
+> 💡 **Quyết định thiết kế (có chủ đích, không phải bỏ sót):** README nêu 2 phương án lưu lịch sử — `tracking=True` *hoặc* model riêng `ot.request.history`. Lộ trình này chọn **`tracking=True`** vì:
+> - Odoo lo sẵn việc ghi `mail.tracking.value` + hiển thị diff "giá trị cũ -> mới" ở chatter, không phải tự code model + view.
+> - Đủ cho yêu cầu "lưu lịch sử khi đổi state/giờ/PM/DL".
+>
+> Chỉ nên làm model `ot.request.history` riêng khi cần audit phức tạp hơn tracking cho phép: lưu thêm field tùy biến (IP, lý do từng lần, ghi chú), query/report lịch sử như dữ liệu nghiệp vụ, hoặc giữ lịch sử khi xóa record gốc. Nếu chọn hướng này, đánh đổi là tự viết model + access + view và mất phần diff đẹp sẵn của chatter.
 
 ## 6.2. Odoo Concepts cần biết
 
@@ -859,9 +927,9 @@ PM chỉ thấy của project mình quản lý:
      - PM: bản ghi project mình quản lý (có condition state).
      - DL: bản ghi department mình phụ trách (có condition state).
      - Admin thấy hết (qua group, không tạo rule riêng).
-2. `security/ir.model.access.csv` cho 3 model + wizard. Phân CRUD chuẩn.
-3. Thêm `groups="ot_registration.group_ot_pm"` cho button "PM Approve" (nếu chưa có ở C5).
-4. Đăng ký 2 file vào `__manifest__.py['data']` LÊN ĐẦU.
+2. **Tinh chỉnh** `security/ir.model.access.csv` (đã tạo sơ khai ở C3): thay dòng `base.group_user` bằng các dòng theo group nghiệp vụ (employee/pm/dl/admin) + thêm dòng cho wizard. Phân CRUD chuẩn theo bảng quyền (vd PM/DL `perm_create=0, perm_unlink=0`).
+3. Thêm `groups="ot_registration.group_ot_pm"` cho button "PM Approve" (C5 đã cố ý hoãn lại - giờ mới có group để gắn).
+4. Đăng ký `security/ot_security.xml` vào `__manifest__.py['data']` LÊN ĐẦU (cùng cụm với `ir.model.access.csv` đã đăng ký từ C3); file groups phải load TRƯỚC file CSV tham chiếu group đó.
 
 **Câu hỏi:**
 - (a) Vì sao security file phải load đầu tiên trong `data`?
@@ -897,14 +965,26 @@ Paste 2 file security, login 3 user 3 group, screenshot list view khác nhau, tr
 `noupdate="1"` -> upgrade module KHÔNG ghi đè record (admin sửa qua UI không bị reset).
 
 ### Concept 2: Datetime trong Odoo
-- `fields.Datetime` lưu UTC trong DB.
+- `fields.Datetime` lưu UTC (naive, không gắn tzinfo) trong DB.
 - `datetime.weekday()` -> 0 (Mon) .. 6 (Sun).
-- Compare giờ trong ngày phải convert timezone:
+- Compare giờ trong ngày phải convert timezone.
+
+**BẪY chí mạng:** `fields.Datetime.from_string(...)` trả về `datetime` **naive**. Gọi thẳng `.astimezone(tz)` trên naive datetime trong Python 3 sẽ **giả định giờ hệ thống**, KHÔNG phải UTC -> lệch giờ -> gán sai category. Đây là logic cốt lõi của project nên sai chỗ này là sai hết.
+
+Cách đúng (idiomatic Odoo) - dùng `context_timestamp` để Odoo tự localize từ UTC sang tz của user:
 
 ```python
-from pytz import timezone
-tz = timezone(self.env.user.tz or 'Asia/Ho_Chi_Minh')
-local_start = fields.Datetime.from_string(self.start_datetime).astimezone(tz)
+naive_utc = fields.Datetime.from_string(self.start_datetime)  # naive, ở UTC
+local_start = fields.Datetime.context_timestamp(self, naive_utc)  # tz-aware theo user.tz
+```
+
+Hoặc tự localize bằng pytz (tường minh hơn, dễ giải thích "tại sao"):
+
+```python
+import pytz
+tz = pytz.timezone(self.env.user.tz or 'Asia/Ho_Chi_Minh')
+naive_utc = fields.Datetime.from_string(self.start_datetime)
+local_start = pytz.utc.localize(naive_utc).astimezone(tz)  # localize UTC TRƯỚC rồi mới đổi tz
 ```
 
 ### Concept 3: Quy tắc 5 category
@@ -919,6 +999,13 @@ local_start = fields.Datetime.from_string(self.start_datetime).astimezone(tz)
 
 ### Concept 4: Edge case OT qua đêm
 Line OT từ T6 21h -> T7 2h: tách 2 line (21h-22h: weekday-night, 0h-2h: weekend-night) HOẶC dominant rule (>50% thời gian rơi vào khung). Phải bảo vệ quyết định.
+
+> ⚠️ **Đừng tự ý tách line ngầm trong `create`/`write`.** Có gợi ý "override `create`/`write` để tự chặt 1 line thành 2 khi qua mốc 00:00". Nghe hay nhưng là **bẫy**:
+> - **Đệ quy**: `create`/`write` lại tạo sibling record -> dễ tự gọi lại chính nó (cần guard context cẩn thận, dễ vòng lặp vô hạn).
+> - **Mutate dữ liệu user âm thầm**: user nhập 1 line, save xong thành 2 -> UX bất ngờ, khó debug, khó test.
+> - Xung đột với `onchange` và lệnh One2many `(0,0,{})`.
+>
+> Nếu muốn tách thật, làm ở **action button tường minh** ("Tách line theo khung giờ") hoặc tầng report/tính toán - KHÔNG nhét ngầm vào `create`/`write`. Ở mức bài tập này, **dominant rule** (gọn, dễ test) là lựa chọn an toàn; chỉ cần *bảo vệ được quyết định* và document trong docstring.
 
 ## 8.3. Ví dụ minh họa
 
@@ -1167,10 +1254,263 @@ def migrate(cr, version):
 **Câu hỏi:**
 - (a) Tại sao phải `if not version: return`? Cài mới có cần chạy migration không?
 - (b) Đặt script vào `12.0.1.0.0/` thay vì `12.0.1.1.0/` thì khi nào chạy?
-- (c) Compute `employee_display_name` ở C4 đã tự gán cho record mới - tại sao vẫn cần migration? (Hint: compute có chạy cho data tạo trước khi field tồn tại không?)
+- (c) Compute `employee_display_name` ở C4 đã tự gán cho record mới - tại sao vẫn cần migration? (Hint: compute có chạy cho data tạo trước khi field tồn tại không?) Liên hệ lại quyết định live/snapshot ở **C4 câu hỏi (d)**: nếu bạn chọn snapshot thì migration đóng vai trò gì khác so với khi chọn live?
 
 ## 10.5. Cách nộp bài
-Paste script migration + manifest mới, screenshot DB trước/sau, checklist đã tick. Đây là Chương cuối - sau khi xong, mentor sẽ làm code review tổng thể.
+Paste script migration + manifest mới, screenshot DB trước/sau, checklist đã tick.
+
+---
+
+# CHƯƠNG 11: Automated Testing
+
+## 11.1. Mục tiêu
+
+- Hiểu cơ chế test của Odoo: `TransactionCase`, rollback sau mỗi test, chạy bằng `--test-enable`.
+- Tự verify được workflow và constrains BẰNG CODE thay vì click tay -> nghiệm thu lặp lại được, không sợ regression.
+- Viết test cho các nhánh quan trọng: state machine, constrains 2 ngày, constrains trùng giờ, compute `total_ot_hours`, gán category theo giờ.
+
+## 11.2. Odoo Concepts cần biết
+
+### Concept 1: Các lớp test
+- `odoo.tests.common.TransactionCase`: mỗi test method chạy trong 1 transaction, **tự rollback** -> test độc lập, DB sạch. Đây là loại dùng 90% trường hợp.
+- `SingleTransactionCase`: tất cả test dùng chung 1 transaction (ít dùng).
+- `HttpCase`: test cả HTTP/JS tour (nâng cao, không cần ở đây).
+
+### Concept 2: Cấu trúc thư mục test
+
+```text
+ot_registration/
+├── tests/
+│   ├── __init__.py      # from . import test_ot_request
+│   └── test_ot_request.py
+```
+
+`tests/` KHÔNG khai báo trong `__manifest__.py['data']`. Odoo tự discover khi chạy `--test-enable`.
+
+### Concept 3: Khung một test case
+
+```python
+from odoo.tests.common import TransactionCase
+from odoo.exceptions import ValidationError
+from odoo import fields
+
+
+class TestOtRequest(TransactionCase):
+
+    def setUp(self):
+        super().setUp()
+        # Arrange: dữ liệu dùng chung cho nhiều test
+        self.employee = self.env['hr.employee'].create({'name': 'Test Emp'})
+        self.request = self.env['ot.request'].create({
+            'employee_id': self.employee.id,
+        })
+
+    def test_submit_moves_to_pm_waiting(self):
+        self.request.action_submit()
+        self.assertEqual(self.request.state, 'pm_waiting')
+```
+
+### Concept 4: Test một constrains raise đúng lúc
+
+```python
+def test_end_before_start_raises(self):
+    with self.assertRaises(ValidationError):
+        self.env['ot.request.line'].create({
+            'request_id': self.request.id,
+            'start_datetime': '2026-05-21 20:00:00',
+            'end_datetime':   '2026-05-21 18:00:00',  # < start -> phải raise
+        })
+```
+
+`assertRaises` PHẢI bọc đúng dòng gây lỗi. Nếu constrains không raise, test fail -> phát hiện bug.
+
+### Concept 5: Chạy test
+
+```bash
+odoo-bin -c odoo.conf -d <db> -u ot_registration --test-enable --stop-after-init
+```
+
+- `--test-enable`: bật chạy test khi cài/upgrade module.
+- `--stop-after-init`: chạy xong thoát, không giữ server.
+- Lọc theo tag (tùy chọn): thêm decorator `@tagged('ot')` rồi `--test-tags ot`.
+
+### Concept 6: Mẹo test phần gửi mail
+Test không nên gửi mail thật. Có 2 hướng:
+- Kiểm tra **hệ quả** thay vì việc gửi: sau `action_submit`, assert `state` đổi + `submitted_at` được set.
+- Đếm `mail.mail` trong queue: `self.env['mail.mail'].search_count([...])` tăng đúng số lần, thay vì `force_send=True`.
+
+## 11.3. Ví dụ minh họa (demo.order)
+
+```python
+class TestDemoOrder(TransactionCase):
+    def setUp(self):
+        super().setUp()
+        self.order = self.env['demo.order'].create({'name': 'SO001'})
+
+    def test_confirm(self):
+        self.order.action_confirm()
+        self.assertEqual(self.order.state, 'confirmed')
+
+    def test_total_compute(self):
+        self.env['demo.order.line'].create({'order_id': self.order.id, 'subtotal': 100})
+        self.assertEqual(self.order.amount_total, 100)
+```
+
+## 11.4. Bài tập
+
+Tạo `tests/__init__.py` + `tests/test_ot_request.py` với tối thiểu các test sau:
+
+1. **Workflow happy path**: draft -> submit -> pm_approve -> dl_approve -> `approved`. Assert state ở từng bước.
+2. **Reject + reset**: pm_waiting -> reject (qua wizard, set `reject_reason`) -> `rejected` -> reset_to_draft -> `draft`.
+3. **Constrains `end > start`**: tạo line `end < start` -> `assertRaises(ValidationError)`.
+4. **Constrains 2 ngày**: tạo line `ot_date` cách hôm nay 3 ngày rồi `action_submit` -> phải raise (hoặc bị chặn, tùy bạn đặt ở constrains hay action_submit - test theo đúng chỗ bạn implement).
+5. **Constrains trùng giờ**: 2 line đè khoảng `[start, end]` trong cùng request -> raise.
+6. **Compute `total_ot_hours`**: tạo 2 line 2h + 3h -> assert `total_ot_hours == 5`.
+7. **Gán category theo giờ**: tạo line khung T2-T6 19h-21h -> assert `category_id.code == 'WEEKDAY'`; 1 case ban đêm; 1 case T7. (Test này khóa được bug timezone ở C8 - nếu localize sai, assert sẽ fail.)
+
+**Câu hỏi:**
+- (a) Vì sao `TransactionCase` rollback sau mỗi test? Test #1 tạo record có ảnh hưởng DB thật không?
+- (b) Vì sao test mail nên assert "hệ quả" (state/`mail.mail` queue) thay vì gọi `force_send=True`?
+- (c) Test #7 phát hiện được bug timezone (C8) như thế nào? Nếu bỏ `pytz.utc.localize`, test nào fail trước?
+
+## 11.5. Cách nộp bài
+Paste `tests/test_ot_request.py`, output log chạy `--test-enable` (dòng `X passed, 0 failed`), trả lời 3 câu hỏi. Sau chương này mentor làm code review tổng thể.
+
+---
+
+# PHỤ LỤC A: Setup môi trường & dữ liệu test
+
+> Đọc trước khi test C5 (mail) và C7 (security). Mục tiêu: dựng đủ user/project/department để chạy hết luồng nghiệp vụ thật.
+
+## A.1. Outgoing mail server
+
+Không cấu hình thì mail nằm mãi trong queue `mail.mail` ở trạng thái `outgoing` (vẫn test được phần "không log chatter", nhưng không gửi đi thật).
+
+- Test KHÔNG cần gửi thật: vào **Settings -> Technical -> Email -> Emails** xem record `mail.mail` được tạo là đủ chứng minh logic gửi đúng.
+- Muốn gửi thật: **Settings -> Technical -> Email -> Outgoing Mail Servers**, tạo 1 SMTP (vd Gmail app password, hoặc Mailhog/Mailtrap để bắt mail khi dev). Đặt `web.base.url` (System Parameters) đúng host để link trong mail mở được record.
+
+## A.2. Dữ liệu nghiệp vụ tối thiểu
+
+Để luồng PM/DL chạy, các quan hệ sau PHẢI đúng (đây là chỗ học viên hay kẹt "sao PM không nhận mail"):
+
+| Đối tượng | Field then chốt | Ý nghĩa |
+|---|---|---|
+| Employee (nhân viên OT) | `department_id`, `work_email` | để gán department + CC mail |
+| Department | `manager_id` (-> employee), `manager_id.user_id` | DL = user của trưởng phòng |
+| Project | `user_id` (Project Manager) | PM = user này, nơi `pm_id` lấy về |
+| User PM | gán group `OT / PM` (C7) | mới thấy nút PM Approve + record rule |
+| User DL | gán group `OT / DL` (C7) | mới thấy nút DL Approve + record rule |
+
+**Checklist dựng tay (qua UI hoặc shell):**
+1. Tạo 2 user: `pm_user`, `dl_user` (Settings -> Users). Từ C7 trở đi gán đúng group OT.
+2. Tạo 1 department, set `manager_id` = một employee có `user_id = dl_user`.
+3. Tạo 1 project (cần `depends` có `project`), set `user_id = pm_user`.
+4. Tạo employee OT, set `department_id` = department trên, `work_email` thật để thấy CC.
+5. Login `pm_user` / `dl_user` ở cửa sổ ẩn danh để kiểm tra record rule + nút action.
+
+## A.3. Seed nhanh bằng Odoo shell (tùy chọn)
+
+```bash
+odoo-bin shell -c odoo.conf -d <db>
+```
+```python
+dept = env['hr.department'].create({'name': 'Dev'})
+emp  = env['hr.employee'].create({'name': 'Nguyen Van A', 'department_id': dept.id,
+                                  'work_email': 'a@example.com'})
+env.cr.commit()   # shell KHÔNG tự commit - phải gọi tay
+```
+
+> ⚠️ Trong `odoo-bin shell` thay đổi KHÔNG được lưu nếu thiếu `env.cr.commit()`. Khác với test (`TransactionCase`) cố tình rollback.
+
+## A.4. Reset nhanh khi kẹt
+- Module lỗi không cài: xóa record `ir.module.module` trạng thái lỗi hoặc `-i ot_registration` lại trên DB sạch.
+- Đổi data XML có `noupdate="1"` không thấy cập nhật: đúng như thiết kế (C8) - muốn ép cập nhật phải `-u` với DB chưa có record đó, hoặc sửa tay qua UI.
+
+---
+
+# PHỤ LỤC B (BONUS - OPTIONAL): Mở rộng "production-ready"
+
+> ⚠️ **Không bắt buộc.** README không yêu cầu 2 phần này và Acceptance Criteria không có. Chỉ làm SAU khi đã hoàn thành C1-C11 và muốn biến module thành sản phẩm end-to-end. Đặt riêng ở đây để không làm loãng trọng tâm khóa học.
+
+## B.1. Kanban view (rẻ, hợp ngữ cảnh duyệt phiếu)
+
+PM/DL thường muốn nhìn phiếu theo cột trạng thái thay vì tree. Kanban group theo `state` cho cái nhìn tổng quan tiến độ duyệt.
+
+```xml
+<record id="view_ot_request_kanban" model="ir.ui.view">
+    <field name="name">ot.request.kanban</field>
+    <field name="model">ot.request</field>
+    <field name="arch" type="xml">
+        <kanban default_group_by="state" class="o_kanban_small_column">
+            <field name="state"/>
+            <field name="employee_id"/>
+            <field name="total_ot_hours"/>
+            <templates>
+                <t t-name="kanban-box">
+                    <div class="oe_kanban_card oe_kanban_global_click">
+                        <strong><field name="name"/></strong>
+                        <div><field name="employee_id"/></div>
+                        <div>OT: <field name="total_ot_hours"/>h</div>
+                    </div>
+                </t>
+            </templates>
+        </kanban>
+    </field>
+</record>
+```
+
+- Thêm `kanban` vào `view_mode` của action: `view_mode="kanban,tree,form"`.
+- `default_group_by="state"` -> tự xếp cột theo trạng thái.
+- Lưu ý: kéo-thả đổi cột = đổi `state` trực tiếp, **bỏ qua** các method `action_*` (không gửi mail, không check group). Với workflow có duyệt/mail như project này, nên để Kanban **read-only về state** (chỉ xem) hoặc chặn drag bằng cách không cho `group_create`/`records_draggable="0"`, tránh nhảy state sai luồng.
+
+## B.2. QWeb PDF Report (mảng kỹ năng riêng)
+
+Xuất phiếu OT ra PDF để in/lưu trữ sau khi duyệt. Đây là **một chủ đề lớn riêng** (report action + paperformat + QWeb template), nên xem như mini-project.
+
+```xml
+<!-- report/ot_request_report.xml -->
+<record id="action_report_ot_request" model="ir.actions.report">
+    <field name="name">OT Request</field>
+    <field name="model">ot.request</field>
+    <field name="report_type">qweb-pdf</field>
+    <field name="report_name">ot_registration.report_ot_request_document</field>
+    <field name="report_file">ot_registration.report_ot_request_document</field>
+    <field name="binding_model_id" ref="model_ot_request"/>
+    <field name="binding_type">report</field>
+</record>
+
+<template id="report_ot_request_document">
+    <t t-call="web.html_container">
+        <t t-foreach="docs" t-as="o">
+            <t t-call="web.external_layout">
+                <div class="page">
+                    <h2>OT Request: <span t-field="o.name"/></h2>
+                    <p>Nhân viên: <span t-field="o.employee_id"/></p>
+                    <p>Tổng giờ OT: <span t-field="o.total_ot_hours"/></p>
+                    <table class="table">
+                        <thead><tr><th>Ngày</th><th>Bắt đầu</th><th>Kết thúc</th><th>Category</th></tr></thead>
+                        <tbody>
+                            <tr t-foreach="o.line_ids" t-as="l">
+                                <td t-field="l.ot_date"/>
+                                <td t-field="l.start_datetime"/>
+                                <td t-field="l.end_datetime"/>
+                                <td t-field="l.category_id"/>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </t>
+        </t>
+    </t>
+</template>
+```
+
+Concept then chốt nếu làm phần này:
+- `docs` là biến mặc định Odoo truyền vào (recordset đang in).
+- `web.external_layout` = header/footer công ty sẵn có; `web.html_container` bọc ngoài.
+- `t-field` render có format theo kiểu field (date/datetime theo tz), khác `t-esc` (raw).
+- Đăng ký file report trong manifest `data`. Nút "Print" tự xuất hiện nhờ `binding_model_id`.
+- Cân nhắc chỉ cho in khi `state == 'approved'`.
 
 ---
 
@@ -1186,5 +1526,6 @@ Paste script migration + manifest mới, screenshot DB trước/sau, checklist �
 | 6. Wizard + Tracking | [ ] | | |
 | 7. Security | [ ] | | |
 | 8. OT Category Logic | [ ] | | |
-| 9. UI: Decoration + Random | [ ] | | |
+| 9. UI: Decoration + Button list | [ ] | | |
 | 10. Migration + Acceptance | [ ] | | |
+| 11. Automated Testing | [ ] | | |

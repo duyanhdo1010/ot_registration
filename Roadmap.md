@@ -3,6 +3,11 @@
 > Tài liệu này tổng hợp toàn bộ lộ trình học mà mentor và học viên đã thống nhất.
 > Mỗi Chương đều theo format: **Mục tiêu -> Odoo Concepts -> Ví dụ minh họa -> Bài tập -> Cách nộp bài**.
 >
+> Mỗi **Concept** được trình bày theo 3 phần:
+> - **Vấn đề (Why):** tình huống/lỗi thực tế sẽ gặp nếu KHÔNG dùng concept này.
+> - **Giải pháp (How):** đoạn code/cấu hình xử lý gọn gàng.
+> - **Giải thích:** tác dụng của các dòng code chính.
+>
 > Quy ước: Phần "Ví dụ minh họa" dùng domain khác (thư viện, hóa đơn...) để học khái niệm. Bài tập mới là code thật của project.
 
 ---
@@ -85,11 +90,26 @@ flowchart LR
 ## 1.2. Odoo Concepts cần biết
 
 ### Concept 1: "Module" Odoo là gì
-Một module = thư mục Python trong `addons/`. Odoo nhận diện qua 2 file dấu hiệu:
-- `__manifest__.py`: tờ khai (tên, version, depends, danh sách file load).
-- `__init__.py`: file Python để Odoo `import` package.
+
+**Vấn đề (Why):** Bạn viết code xong, copy thư mục vào `addons/`, restart server, vào Apps -> Update Apps List -> gõ tên tìm... **không thấy module đâu**. Không có lỗi, không có warning - Odoo đơn giản là "không nhìn thấy" thư mục của bạn, vì với nó đây chỉ là một thư mục thường, không phải module.
+
+**Giải pháp (How):** Odoo nhận diện module qua 2 file dấu hiệu - thiếu 1 trong 2 là vô hình:
+
+```text
+ot_registration/
+├── __manifest__.py   # tờ khai: tên, version, depends, danh sách file load
+└── __init__.py       # biến thư mục thành Python package
+```
+
+**Giải thích:**
+- `__manifest__.py`: khi Update Apps List, Odoo quét `addons/` và CHỈ thư mục nào có file này mới xuất hiện trong Apps. Đây là "giấy khai sinh" của module.
+- `__init__.py`: lúc Install, Odoo `import` thư mục như một Python package. Có manifest mà thiếu file này -> thấy module trong Apps nhưng cài là Traceback `ImportError`.
 
 ### Concept 2: Cấu trúc thư mục chuẩn
+
+**Vấn đề (Why):** Về kỹ thuật, bạn HOÀN TOÀN có thể nhét model + view + security vào 1 file duy nhất - Odoo vẫn chạy. Nhưng 2 tuần sau, khi cần sửa đúng 1 dòng phân quyền, bạn (và mentor review code) phải lục cả nghìn dòng. Cộng đồng Odoo đã thống nhất một cấu trúc mà **bất kỳ dev Odoo nào nhìn vào cũng biết tìm gì ở đâu**.
+
+**Giải pháp (How):**
 
 ```text
 ot_registration/
@@ -110,7 +130,17 @@ ot_registration/
 └── README.md
 ```
 
+**Giải thích:**
+- `models/`: code Python định nghĩa bảng & nghiệp vụ. `views/`: XML giao diện. `security/`: phân quyền (C7). `data/`: dữ liệu seed như sequence, mail template, category mặc định (C5, C8).
+- `wizard/`: các popup TransientModel (C6) - tách khỏi `models/` để phân biệt "nghiệp vụ chính" và "công cụ tạm".
+- `migrations/`: script nâng cấp dữ liệu theo version (C10).
+- Thư mục chứa file Python (`models/`, `wizard/`) bắt buộc có `__init__.py`; thư mục chỉ chứa XML/CSV thì không cần.
+
 ### Concept 3: `__manifest__.py`
+
+**Vấn đề (Why):** Manifest viết "đại khái" vẫn cài được hôm nay, nhưng để lại 3 quả bom hẹn giờ: version sai chuẩn -> C10 migration **không bao giờ chạy**; thiếu depends -> module load trước cả `mail` -> lỗi khó hiểu khi dùng `mail.template`; khai `data` sai thứ tự -> `ParseError: external id not found` lúc cài.
+
+**Giải pháp (How):**
 
 ```python
 {
@@ -126,12 +156,16 @@ ot_registration/
 }
 ```
 
-3 điểm dễ sai:
-1. `version` PHẢI bắt đầu bằng `12.0.` (đúng major Odoo) - nếu không, migration sẽ không nhận.
-2. `depends` quyết định thứ tự load. Module này sau sẽ cần thêm `mail`, `hr`, `project`.
-3. `data` load **theo thứ tự khai báo**. Sai thứ tự -> `ParseError: external id not found`.
+**Giải thích - 3 điểm dễ sai:**
+1. `version` PHẢI bắt đầu bằng `12.0.` (đúng major Odoo). Cơ chế migration (C10) so sánh version theo format này - sai format là migration bị bỏ qua trong im lặng.
+2. `depends` quyết định **thứ tự load module**: Odoo cài/load các module trong `depends` TRƯỚC module của bạn. Module này sau sẽ cần thêm `mail`, `hr`, `project`.
+3. `data` load **theo thứ tự khai báo trong list**. File B tham chiếu external id của file A thì A phải đứng trước -> sai thứ tự là `ParseError`.
 
 ### Concept 4: `__init__.py`
+
+**Vấn đề (Why):** Đây là lỗi "câm" kinh điển nhất với người mới: bạn viết `models/ot_request.py` đầy đủ, upgrade module **không một dòng lỗi**, vào psql gõ `\dt ot_*` -> **0 bảng**. Lý do: Python chỉ chạy file được `import`. File model không được khai trong `__init__.py` thì với Odoo, nó không tồn tại.
+
+**Giải pháp (How):** Root `__init__.py`:
 
 ```python
 from . import models
@@ -145,7 +179,15 @@ from . import ot_request_line
 from . import ot_category
 ```
 
+**Giải thích:**
+- Chuỗi import là dây chuyền 2 tầng: Odoo import module -> root `__init__.py` import package `models` -> `models/__init__.py` import từng file model. Đứt ở tầng nào thì file sau tầng đó bị bỏ rơi.
+- Khi class model được import, metaclass của Odoo tự đăng ký nó vào registry -> lúc upgrade mới sinh bảng DB. Vì vậy "quên import" = "không có bảng", chứ không phải lỗi syntax.
+
 ### Concept 5: Quy ước đặt tên
+
+**Vấn đề (Why):** Thư mục project hiện tại đang là `ot-registration` (gạch ngang). Cứ để vậy mà code thì đến lúc cài sẽ vỡ trận: **Python không import được package có dấu `-`** (`import ot-registration` là SyntaxError). Ngoài ra, đặt tên file/class/external id tùy hứng khiến teammate không đoán được file nào chứa gì - trong khi cả hệ sinh thái Odoo dùng chung một bộ quy ước.
+
+**Giải pháp (How):** Bảng quy ước chuẩn:
 
 | Loại | Quy ước | Ví dụ |
 |---|---|---|
@@ -156,9 +198,13 @@ from . import ot_category
 | File view | `<model>_views.xml` | `ot_request_views.xml` |
 | External ID XML | `<purpose>_<model>` | `view_ot_request_form` |
 
-**Bẫy số 1:** Thư mục hiện tại `ot-registration` (gạch ngang). Python KHÔNG import được package có dấu `-`. Phải đổi sang `ot_registration`.
+**Giải thích:**
+- Tên model `ot.request` được Odoo tự đổi thành tên bảng `ot_request` (dấu `.` -> `_`). Biết quy tắc này thì nhìn tên model đoán được tên bảng khi vào psql.
+- **Bẫy số 1 của project:** việc đầu tiên của bài tập là đổi `ot-registration` -> `ot_registration`, trước khi viết bất kỳ dòng code nào.
 
 ## 1.3. Ví dụ minh họa (hello_world)
+
+Tình huống: trước khi đụng vào module thật, hãy tự tay làm "module nhỏ nhất có thể cài được" để thấy tận mắt: chỉ cần 2 file là Odoo nhận diện và cài không lỗi.
 
 ```python
 # hello_world/__manifest__.py
@@ -179,7 +225,13 @@ from . import models
 
 `hello_world/models/__init__.py` để trống cũng được, miễn là tồn tại.
 
+Tự kiểm chứng 2 lỗi "câm" để nhớ lâu:
+1. Đổi tên `__manifest__.py` thành `manifest.py` -> Update Apps List -> module biến mất khỏi Apps (Concept 1).
+2. Xóa `models/__init__.py` -> Install -> Traceback `ImportError` (Concept 4).
+
 ## 1.4. Bài tập
+
+Bối cảnh: bạn nhận repo project với thư mục `addons/ot-registration` rỗng. Nhiệm vụ Chương 1 là dựng skeleton chuẩn, cài được sạch sẽ - nền móng cho 10 chương sau.
 
 1. Đổi tên thư mục `addons/ot-registration` -> `addons/ot_registration`.
 2. Tạo `__manifest__.py` với:
@@ -191,7 +243,7 @@ from . import models
 3. Tạo `__init__.py` rỗng ở root module.
 4. Tạo các thư mục con rỗng: `models/`, `views/`, `security/`, `data/`, `wizard/`, `migrations/`. Thư mục Python phải có `__init__.py` rỗng.
 5. KHÔNG tạo model/view nào.
-6. Restart Odoo -> Apps -> Update Apps List -> Install. Đảm bảo không Traceback.
+6. Restart Odoo -> Apps -> Update Apps List -> Install. **Tiêu chí nghiệm thu:** không Traceback, module hiện trạng thái Installed.
 
 **Câu hỏi:**
 - (a) Tại sao `depends` quan trọng? Quên `mail` thì sao?
@@ -216,11 +268,24 @@ Paste `__manifest__.py`, output `tree /F addons\ot_registration`, trả lời 3 
 ## 2.2. Odoo Concepts cần biết
 
 ### Concept 1: 3 loại Model
-- `models.Model`: persistent (có bảng DB), dùng cho nghiệp vụ chính.
-- `models.TransientModel`: bảng tự động xóa qua cron `auto-vacuum` - dùng cho wizard.
-- `models.AbstractModel`: không tạo bảng, để model khác `_inherit`.
+
+**Vấn đề (Why):** Nếu mọi model đều là bảng vĩnh viễn thì sẽ có rác: popup "nhập lý do từ chối" (C6) mỗi lần mở tạo 1 dòng DB - sau 1 năm bảng phình hàng nghìn dòng dữ liệu tạm không ai cần. Ngược lại có code muốn **dùng chung cho nhiều model** (như chatter của `mail.thread`) mà chẳng cần bảng riêng nào. Một loại model không phục vụ được cả 3 nhu cầu.
+
+**Giải pháp (How):** Odoo cho 3 loại, chọn theo vòng đời dữ liệu:
+
+- `models.Model`: persistent (có bảng DB), dùng cho nghiệp vụ chính -> `ot.request`, `ot.category`.
+- `models.TransientModel`: có bảng nhưng record **tự bị xóa** qua cron `auto-vacuum` - dùng cho wizard/popup (C6).
+- `models.AbstractModel`: không tạo bảng, chỉ để model khác `_inherit` lấy field + method (vd `mail.thread`).
+
+**Giải thích:**
+- Tiêu chí chọn: *dữ liệu cần sống bao lâu?* Mãi mãi -> `Model`. Chỉ trong 1 phiên thao tác -> `TransientModel`. Không phải dữ liệu, là code tái sử dụng -> `AbstractModel`.
+- Chọn sai hướng nguy hiểm nhất: dùng `TransientModel` cho dữ liệu nghiệp vụ -> cron âm thầm xóa mất record thật.
 
 ### Concept 2: Thuộc tính class
+
+**Vấn đề (Why):** Tạo model xong mà bỏ qua các thuộc tính `_*`: Odoo 12 bắn warning thiếu `_description` ngay lúc load; field Many2one trỏ tới model hiển thị chuỗi vô nghĩa kiểu `ot.category,3` nếu model đó không có field `name` mà bạn không khai `_rec_name`; list view xếp record lộn xộn theo `id` vì thiếu `_order`.
+
+**Giải pháp (How):**
 
 | Thuộc tính | Ý nghĩa |
 |---|---|
@@ -230,7 +295,16 @@ Paste `__manifest__.py`, output `tree /F addons\ot_registration`, trả lời 3 
 | `_order` | sort mặc định |
 | `_inherit` | kế thừa model có sẵn |
 
+**Giải thích:**
+- `_name` là định danh duy nhất trong registry - mọi nơi khác (Many2one, env, XML) đều gọi model qua tên này.
+- `_rec_name` quyết định "bộ mặt" của record khi xuất hiện trong dropdown/Many2one. Model không có field `name` thì PHẢI chỉ định, không thì user thấy `model,id`.
+- `_inherit` (không kèm `_name` mới) = mở rộng model có sẵn; đi kèm `_name` mới = kế thừa kiểu copy. C6 sẽ dùng `_inherit = ['mail.thread']`.
+
 ### Concept 3: Field cơ bản
+
+**Vấn đề (Why):** Người mới hay khai mọi thứ bằng `Char` "cho nhanh". Hậu quả thấy ngay ở dữ liệu thật: cột trạng thái chứa lẫn lộn `"Draft"`, `"draft"`, `"nháp"` -> không filter nổi; số giờ OT lưu `"2.5h"` -> không sum/so sánh được; ngày tháng lưu text -> không sort được. Kiểu field đúng = vừa ràng buộc dữ liệu ở tầng DB, vừa được Odoo render đúng widget (date picker, checkbox, dropdown).
+
+**Giải pháp (How):**
 
 ```python
 from odoo import models, fields, api
@@ -252,22 +326,47 @@ class Example(models.Model):
     started_at = fields.Datetime()
 ```
 
+**Giải thích:**
+- `Selection` là câu trả lời cho bài toán "trạng thái": value kỹ thuật (`'draft'`) tách khỏi label hiển thị (`'Nhap'`) -> code so sánh ổn định, UI đổi label thoải mái.
+- `Char` vs `Text`: 1 dòng có thể giới hạn độ dài vs văn bản dài (lý do từ chối, ghi chú).
+- `Date` vs `Datetime`: `Datetime` lưu cả giờ và **lưu theo UTC** - chi tiết này là nguồn gốc cả Chương 8.
+- Mỗi field khai ở đây = 1 column được Odoo tự tạo trong bảng khi upgrade (không cần viết SQL).
+
 ### Concept 4: Quan hệ
-- `Many2one('target.model', ondelete='cascade'|'restrict'|'set null')`
-- `One2many('target.model', 'inverse_field_name')` - bắt buộc Many2one ngược.
-- `Many2many('target.model', 'rel_table', 'col1', 'col2')`
+
+**Vấn đề (Why):** Phiếu OT cần biết "của nhân viên nào". Cách ngây thơ: lưu `employee_name = fields.Char()`. Hậu quả: nhân viên đổi tên -> 500 phiếu cũ mang tên cũ; không group by theo nhân viên; gõ sai tên là thành "nhân viên mới". Bài toán này (và "1 phiếu có nhiều dòng OT") phải giải bằng **liên kết giữa các bảng**, không phải copy dữ liệu.
+
+**Giải pháp (How):**
+
+- `Many2one('target.model', ondelete='cascade'|'restrict'|'set null')` - "nhiều phiếu thuộc về 1 nhân viên".
+- `One2many('target.model', 'inverse_field_name')` - "1 phiếu có nhiều line"; bắt buộc có Many2one ngược ở model con.
+- `Many2many('target.model', 'rel_table', 'col1', 'col2')` - quan hệ 2 chiều tự do (vd tag).
+
+**Giải thích:**
+- `Many2one` là field DUY NHẤT thực sự tạo column trong DB (foreign key). `One2many` chỉ là "ống nhòm" nhìn ngược qua Many2one của model con - vì vậy thiếu Many2one ngược là khai One2many vô nghĩa.
+- `ondelete` trả lời câu hỏi "xóa cha thì con ra sao?": `cascade` xóa theo, `restrict` chặn không cho xóa, `set null` để con mồ côi. Chọn sai là mất dữ liệu hoặc không xóa nổi rác.
+- Bài tập C2 sẽ phải tự trả lời: xóa `ot.request` thì các `ot.request.line` nên ra sao?
 
 ### Concept 5: Tham số phổ biến
-`required`, `default`, `readonly`, `copy`, `index`, `help`, `tracking`, `groups`.
 
-**Lưu ý `copy=False`:** khi user bấm "Duplicate" (hoặc gọi `.copy()`), Odoo mặc định copy mọi field. Có những field KHÔNG nên copy:
-- `name` (mã phiếu từ sequence) -> bản sao phải sinh mã mới, không trùng.
-- `state` -> bản sao nên về `draft`, không kế thừa `approved`.
-- `submitted_at`, `pm_action_at`, `dl_action_at`, `reject_reason` -> mốc thời gian/lý do của bản gốc, copy sang là sai dữ liệu.
+**Vấn đề (Why):** Tình huống thật sẽ gặp ở C5: user mở 1 phiếu OT đã **approved**, bấm "Duplicate" để đăng ký tuần mới. Odoo mặc định copy MỌI field -> bản sao sinh ra mang luôn `state='approved'` (chưa ai duyệt!), trùng mã phiếu, và mang cả mốc thời gian duyệt của bản gốc. Dữ liệu sai nghiêm trọng mà không ai nhập sai cả.
 
-Đặt `copy=False` cho các field này (sẽ dùng cụ thể ở C5 khi có sequence + state). Field quan hệ One2many như `line_ids` thì mặc định `copy=True` là hợp lý (copy luôn các line).
+**Giải pháp (How):** Bộ tham số khai kèm field: `required`, `default`, `readonly`, `copy`, `index`, `help`, `tracking`, `groups`. Riêng bài toán Duplicate, đặt `copy=False` cho các field không được phép nhân bản:
+
+```python
+name = fields.Char(copy=False)            # mã phiếu -> bản sao phải sinh mã mới
+state = fields.Selection([...], copy=False)  # bản sao phải về draft
+submitted_at = fields.Datetime(copy=False)   # mốc thời gian của bản gốc
+```
+
+**Giải thích:**
+- `copy=False` -> khi `.copy()`, field này bị bỏ qua và nhận `default` (hoặc rỗng). Áp cho: `name`, `state`, `submitted_at`, `pm_action_at`, `dl_action_at`, `reject_reason` (sẽ dùng cụ thể ở C5 khi có sequence + state).
+- Field quan hệ One2many như `line_ids` thì mặc định `copy=True` là hợp lý: duplicate phiếu nên copy luôn các line.
+- `index=True` cho field hay bị search (vd `code`); `help` hiện tooltip cho user; `tracking` để dành C6.
 
 ## 2.3. Ví dụ minh họa (Library Book)
+
+Tình huống: thư viện có đầu sách (`library.book`), mỗi đầu sách in nhiều bản vật lý (`library.book.copy`) - đúng hình quan hệ cha-con mà `ot.request` / `ot.request.line` sẽ dùng. Mất bản copy thì chỉ mất bản đó; xóa đầu sách thì các bản copy đi theo (`cascade`).
 
 ```python
 class LibraryBook(models.Model):
@@ -293,7 +392,11 @@ class LibraryBookCopy(models.Model):
     code = fields.Char(required=True)
 ```
 
+Đối chiếu với concept: `_rec_name = 'title'` vì model không có field `name`; `copy_ids` chỉ hoạt động nhờ `book_id` Many2one ngược; `isbn` đánh `index` vì là field tra cứu.
+
 ## 2.4. Bài tập
+
+Bối cảnh: dựng "xương sống dữ liệu" cho cả project. Mọi chương sau (view, compute, workflow, security) đều xếp lên 3 model này - thiết kế sai ở đây là sửa dây chuyền về sau.
 
 1. `models/ot_category.py` - model `ot.category`: tự suy luận field (gợi ý: `name`, `code`, `description`, `active`, có thể thêm `start_hour`, `end_hour`, `weekday_type` để C8 dùng).
 2. `models/ot_request.py` - model `ot.request`: đầy đủ header field từ README mục **1)** (trừ field compute - chưa làm chương này: `department_id`, `total_ot_hours`, `employee_display_name`).
@@ -302,7 +405,7 @@ class LibraryBookCopy(models.Model):
    - `line_ids = One2many('ot.request.line', 'request_id')`.
 3. `models/ot_request_line.py` - model `ot.request.line`: `request_id`, `ot_date`, `start_datetime`, `end_datetime`, `category_id` (Many2one tới `ot.category`). Tạm CHƯA làm `duration_hours`.
 4. Khai báo `models/__init__.py` và root `__init__.py`.
-5. Upgrade -> psql `\dt ot_*` phải có 3 bảng.
+5. Upgrade -> psql `\dt ot_*` phải có 3 bảng. **Tiêu chí nghiệm thu:** đủ 3 bảng, không warning thiếu `_description`.
 
 **Câu hỏi:**
 - (a) Tại sao `line_ids` cần Many2one ngược? Thiếu thì sao?
@@ -326,6 +429,10 @@ Paste 3 file model + `models/__init__.py`, screenshot `\dt ot_*`, trả lời 3 
 
 ### Concept 1: View là `ir.ui.view`
 
+**Vấn đề (Why):** Sau C2 bạn có 3 bảng trong DB nhưng user **không có cách nào nhìn thấy hay nhập liệu** - chẳng lẽ bắt user gõ SQL? Trong Odoo, giao diện không phải file HTML tĩnh: mỗi màn hình là một **bản ghi XML lưu trong DB** (model `ir.ui.view`), được web client đọc và render. Hiểu điều này mới hiểu vì sao "sửa view phải upgrade module" và vì sao view có external id.
+
+**Giải pháp (How):** Khung khai báo chung cho MỌI loại view:
+
 ```xml
 <record id="view_xxx_form" model="ir.ui.view">
     <field name="name">xxx.form</field>
@@ -336,7 +443,16 @@ Paste 3 file model + `models/__init__.py`, screenshot `\dt ot_*`, trả lời 3 
 </record>
 ```
 
+**Giải thích:**
+- `<record model="ir.ui.view">`: bạn đang **tạo 1 record** vào bảng view của Odoo - giống hệt tạo record nghiệp vụ, chỉ khác là tạo bằng XML lúc cài module.
+- `model`: view này vẽ giao diện cho model nào.
+- `arch`: "bản vẽ" thực sự - tag gốc bên trong (`<form>`, `<tree>`, `<search>`) quyết định loại view.
+
 ### Concept 2: Cấu trúc Form chuẩn
+
+**Vấn đề (Why):** Không khai form view, Odoo tự sinh một form mặc định: mọi field xếp dọc một cột, không nhóm, không tiêu đề, bảng line không sửa nhanh được. Với phiếu OT có hơn 10 field + 1 bảng line, form tự sinh gần như không dùng nổi.
+
+**Giải pháp (How):**
 
 ```xml
 <form>
@@ -362,7 +478,17 @@ Paste 3 file model + `models/__init__.py`, screenshot `\dt ot_*`, trả lời 3 
 </form>
 ```
 
+**Giải thích:**
+- `<header>`: dải trên cùng dành cho nút workflow + statusbar (C5 sẽ lấp đầy).
+- `<group>` lồng `<group>`: chia form 2 cột - layout chuẩn của mọi form Odoo.
+- `<notebook>/<page>`: tab - nơi đặt bảng con `line_ids`.
+- Tree lồng trong `<field name="line_ids">`: định nghĩa luôn giao diện bảng con tại chỗ; `editable="bottom"` cho nhập line ngay trên form không cần mở popup.
+
 ### Concept 3: Tree & Search
+
+**Vấn đề (Why):** Vài tháng vận hành, list có hàng trăm phiếu OT. PM mở list chỉ cần trả lời "phiếu nào đang chờ TÔI duyệt?" - không có search view tử tế thì user phải lướt từng trang. Tree không chọn cột thì hiện mặc định vài field đầu, thiếu thông tin quyết định.
+
+**Giải pháp (How):**
 
 ```xml
 <tree string="OT Requests">
@@ -379,7 +505,16 @@ Paste 3 file model + `models/__init__.py`, screenshot `\dt ot_*`, trả lời 3 
 </search>
 ```
 
+**Giải thích:**
+- `<field>` trong `<search>`: cho phép gõ tìm theo field đó ở ô search.
+- `<filter domain="...">`: filter bấm-một-phát, domain là điều kiện lọc viết dạng Python list.
+- `<filter context="{'group_by': ...}">`: không lọc mà GOM nhóm - PM group theo state là thấy ngay cụm "chờ duyệt".
+
 ### Concept 4: Action & Menu
+
+**Vấn đề (Why):** Có đủ form/tree/search rồi nhưng user vẫn... không có lối vào: không menu nào dẫn tới chúng. View chỉ là "bản vẽ", cần thứ kết nối: user bấm menu -> menu gọi action -> action mở model với các view tương ứng.
+
+**Giải pháp (How):**
 
 ```xml
 <record id="action_ot_request" model="ir.actions.act_window">
@@ -393,12 +528,28 @@ Paste 3 file model + `models/__init__.py`, screenshot `\dt ot_*`, trả lời 3 
           parent="menu_ot_root" action="action_ot_request" sequence="10"/>
 ```
 
+**Giải thích:**
+- `ir.actions.act_window` = "mở cửa sổ làm việc với model X": `view_mode="tree,form"` nghĩa là vào thấy list trước, click record ra form.
+- `<menuitem>` không có `parent` -> menu gốc trên thanh menu chính; có `parent` + `action` -> mục con thực sự mở màn hình.
+- `sequence` điều khiển thứ tự các menu cùng cấp.
+
 ### Concept 5: External ID & thứ tự load
-- Mỗi `<record id="...">` -> external id `<module>.<id>`.
-- Khai báo file XML trong `__manifest__.py['data']` đúng thứ tự: file định nghĩa view trước, file menu/action tham chiếu sau.
+
+**Vấn đề (Why):** Bạn khai file menu TRƯỚC file view trong manifest -> cài module nổ ngay: `ParseError: External ID not found in the system: ot_registration.view_ot_request_form`. Lỗi này (và họ hàng của nó) sẽ đeo bám suốt project nếu không hiểu cơ chế external id.
+
+**Giải pháp (How):**
+
+- Mỗi `<record id="...">` sinh ra một external id dạng `<module>.<id>` (vd `ot_registration.view_ot_request_form`) - dùng để file khác tham chiếu qua `ref=`.
+- Khai báo file XML trong `__manifest__.py['data']` đúng thứ tự: **file bị tham chiếu đứng trước, file tham chiếu đứng sau** (view trước, action/menu sau).
+
+**Giải thích:**
+- Odoo load các file trong `data` tuần tự từ trên xuống, gặp `ref` tới id chưa tồn tại là dừng ngay. Quy tắc xếp hàng an toàn cho cả project: **security -> data -> views -> menu/action -> wizard**.
 
 ### Concept 6: `ir.model.access.csv` sơ khai (bắt buộc khi có UI)
-Model mới mà KHÔNG có access rule thì: admin/superuser vẫn dùng được (nên bạn tưởng "chạy ngon"), nhưng **user thường bị `AccessError`** và Odoo bắn warning lúc load. Vì C3 bắt đầu CRUD qua UI, ta tạo 1 file access **sơ khai** (toàn quyền cho user nội bộ) - tới C7 mới tách nhỏ theo group nghiệp vụ.
+
+**Vấn đề (Why):** Bẫy "chạy ngon trên máy tôi": model mới mà KHÔNG có access rule thì admin/superuser vẫn dùng được bình thường (nên bạn tưởng mọi thứ ổn), nhưng **user thường mở menu là dính `AccessError`**, và Odoo bắn warning "no access rules" lúc load. Demo cho mentor bằng user thường là lộ ngay.
+
+**Giải pháp (How):** C3 bắt đầu CRUD qua UI nên tạo 1 file access **sơ khai** (toàn quyền cho user nội bộ) - tới C7 mới tách nhỏ theo group nghiệp vụ:
 
 ```csv
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
@@ -407,10 +558,15 @@ access_ot_request_line_user,access.ot.request.line.user,model_ot_request_line,ba
 access_ot_category_user,access.ot.category.user,model_ot_category,base.group_user,1,1,1,1
 ```
 
-- Cấp cho `base.group_user` (user nội bộ) là đủ; cấp `base.group_system` vô nghĩa vì admin đã có sẵn.
+**Giải thích:**
+- Mỗi dòng = "group X được làm gì trên model Y", 4 số cuối là read/write/create/unlink (1=cho phép).
+- `model_ot_request`: external id mà Odoo TỰ sinh cho mỗi model theo format `model_<tên bảng>` - không phải bạn đặt.
+- Cấp cho `base.group_user` (user nội bộ) là đủ; cấp `base.group_system` vô nghĩa vì admin đã có sẵn toàn quyền.
 - File này load **lên đầu** `data` (security trước view). C7 sẽ thay/bổ sung các dòng theo từng group.
 
 ## 3.3. Ví dụ minh họa (Library)
+
+Tình huống: nối tiếp module thư viện ở C2 - giờ thủ thư cần màn hình nhập sách. Đây là "bộ tứ tối thiểu" để 1 model lên được giao diện: view -> action -> menu (đúng thứ tự load).
 
 ```xml
 <odoo>
@@ -436,7 +592,11 @@ access_ot_category_user,access.ot.category.user,model_ot_category,base.group_use
 </odoo>
 ```
 
+Thử nghịch để nhớ Concept 5: kéo block `<menuitem>` lên TRƯỚC `<record id="action_library_book">` rồi upgrade -> đọc kỹ message lỗi `External ID not found`.
+
 ## 3.4. Bài tập
+
+Bối cảnh: sau chương này, một nhân viên (user thường, không phải admin) phải tự tạo được phiếu OT hoàn chỉnh qua UI: mở menu, điền thông tin, thêm từng dòng OT, save.
 
 1. `views/ot_category_views.xml`: form + tree + action + menu.
 2. `views/ot_request_views.xml`:
@@ -455,7 +615,7 @@ access_ot_category_user,access.ot.category.user,model_ot_category,base.group_use
        'views/ot_request_line_views.xml',
    ],
    ```
-6. Upgrade -> tạo thử 1 OT Request -> save -> mở lại -> dữ liệu còn. Kiểm tra terminal KHÔNG còn warning "no access rules".
+6. Upgrade -> tạo thử 1 OT Request -> save -> mở lại -> dữ liệu còn. **Tiêu chí nghiệm thu:** terminal KHÔNG còn warning "no access rules"; thử bằng 1 user thường (không phải admin) vẫn CRUD được.
 
 **Câu hỏi:**
 - (a) Tại sao file menu/action phải SAU file view? Đảo ngược thì sao?
@@ -479,10 +639,10 @@ Paste 3 file XML, screenshot form OT Request, trả lời 3 câu hỏi.
 ## 4.2. Odoo Concepts cần biết
 
 ### Concept 1: `@api.depends`
-- Chạy mỗi khi field nguồn thay đổi (UI hoặc code).
-- Bắt buộc khai báo `compute='_compute_x'`.
-- `store=True` -> ghi DB (dùng được tree/search/group_by).
-- `store=False` (mặc định) -> tính lại mỗi lần đọc.
+
+**Vấn đề (Why):** `total_ot_hours` là con số DL nhìn vào để quyết định duyệt. Nếu để user tự cộng tay: thêm/sửa/xóa 1 line mà quên cập nhật tổng -> DL duyệt trên số SAI. Nếu tự viết hàm tính rồi gọi trong từng chỗ sửa line -> sót 1 chỗ là lệch. Cần một field **tự tính lại mỗi khi nguồn thay đổi**, và ORM phải là người theo dõi thay đổi, không phải bạn.
+
+**Giải pháp (How):**
 
 ```python
 total = fields.Float(compute='_compute_total', store=True)
@@ -493,10 +653,16 @@ def _compute_total(self):
         rec.total = sum(rec.line_ids.mapped('subtotal'))
 ```
 
+**Giải thích:**
+- `@api.depends('line_ids.subtotal')`: kê khai field nguồn. ORM chỉ "canh chừng" đúng những field được kê tên - sửa `subtotal` của bất kỳ line nào (qua UI hay code) là compute chạy lại.
+- `store=True`: ghi kết quả xuống DB -> dùng được ở tree, search, group_by, decoration (C9). Mặc định `store=False` thì giá trị chỉ tính on-the-fly lúc đọc, **không search/sort được**.
+- `for rec in self`: compute nhận recordset (có thể nhiều record cùng lúc) - cú sốc tư duy số 1, phải lặp.
+
 ### Concept 2: `@api.onchange`
-- Chỉ trigger khi user đổi field trong form (chưa save).
-- KHÔNG chạy khi `create()`/`write()` qua code.
-- Dùng để gợi ý/auto-fill.
+
+**Vấn đề (Why):** User chọn project "Website Redesign" rồi phải TỰ biết PM của project đó là ai để điền vào `pm_id` -> vừa phiền vừa dễ chọn nhầm người, mail duyệt (C5) bay sai địa chỉ. Muốn: vừa chọn project xong, form **tự điền PM ngay lập tức, trước cả khi save**.
+
+**Giải pháp (How):**
 
 ```python
 @api.onchange('partner_id')
@@ -505,9 +671,17 @@ def _onchange_partner_id(self):
         self.email = self.partner_id.email
 ```
 
+**Giải thích:**
+- Chỉ trigger khi user đổi field **trên form, chưa save** - bản chất là trợ lý điền form.
+- KHÔNG chạy khi record được tạo bằng `create()`/`write()` qua code - đây là điểm chí mạng phân biệt với compute, và là lý do C8 cần cả hai.
+- Trong onchange, `self` luôn là 1 record ảo (chưa có trong DB) -> dùng `self.field` trực tiếp, không cần loop.
+- Giá trị onchange điền chỉ là **gợi ý**: user sửa đè được. Không dùng onchange để ép ràng buộc dữ liệu.
+
 ### Concept 3: `@api.constrains`
-- Chạy mỗi `create`/`write` field nguồn.
-- Raise `ValidationError` để chặn lưu.
+
+**Vấn đề (Why):** User nhập giờ kết thúc OT **trước** giờ bắt đầu (18h00 -> 16h00), bấm save: nếu không ai chặn, dòng dữ liệu vô lý này nằm trong DB, `duration_hours` ra số âm, tổng giờ sai, báo cáo sai. Chặn bằng UI thôi không đủ - dữ liệu vào bằng code/import vẫn lọt. Phải có chốt chặn ở tầng ORM: **vi phạm là không cho lưu**.
+
+**Giải pháp (How):**
 
 ```python
 from odoo.exceptions import ValidationError
@@ -519,18 +693,53 @@ def _check_dates(self):
             raise ValidationError('Ngay ket thuc phai sau ngay bat dau.')
 ```
 
+**Giải thích:**
+- Chạy sau mỗi `create`/`write` có đụng tới field kê trong decorator - bất kể nguồn là UI, code hay import.
+- `raise ValidationError`: rollback thao tác lưu + hiện popup lỗi cho user. Không raise = cho qua.
+- So với onchange: onchange là "nhắc nhở mềm" trên form, constrains là "luật cứng" ở cổng DB. Dữ liệu quan trọng cần cả 2 tầng.
+
 ### Concept 4: `self.ensure_one()` vs vòng lặp
-- Compute/constrains: `self` là recordset -> `for rec in self`.
-- Onchange: `self` là 1 record -> dùng `self.field` trực tiếp.
+
+**Vấn đề (Why):** Code chạy ngon khi test trên 1 form, nhưng khi user chọn 3 record ở list view rồi chạy server action -> nổ `ValueError: Expected singleton: ot.request(1, 2, 3)`. Lý do: `self` lúc này chứa 3 record, mà code viết kiểu `self.state` (chỉ hợp lệ với đúng 1 record).
+
+**Giải pháp (How):** Chọn 1 trong 2 tùy ngữ cảnh:
+
+```python
+# Cách 1: method được thiết kế xử lý hàng loạt
+def action_x(self):
+    for rec in self:
+        rec.state = 'done'
+
+# Cách 2: method chỉ có nghĩa với đúng 1 record
+def get_record_url(self):
+    self.ensure_one()
+    return ...
+```
+
+**Giải thích:**
+- `for rec in self`: an toàn với mọi kích thước recordset (0, 1, n record) - mặc định nên viết kiểu này cho compute/constrains/action.
+- `self.ensure_one()`: tuyên bố "method này chỉ chấp nhận 1 record", nhiều hơn là raise sớm với message rõ ràng - tốt hơn để lỗi singleton nổ ở dòng khó đoán phía dưới.
+- Onchange là ngoại lệ duy nhất: luôn 1 record, truy cập `self.field` trực tiếp.
 
 ### Concept 5: `related` - shortcut compute
+
+**Vấn đề (Why):** Phiếu OT cần hiện phòng ban, mà phòng ban thực chất chỉ là "lấy `department_id` của `employee_id`". Viết hẳn 1 method compute 4-5 dòng cho việc "đi xuyên 1 quan hệ lấy 1 field" là thừa - và project này cần tới vài field kiểu đó.
+
+**Giải pháp (How):**
 
 ```python
 department_id = fields.Many2one('hr.department',
     related='employee_id.department_id', store=True, readonly=True)
 ```
 
+**Giải thích:**
+- `related='employee_id.department_id'`: Odoo tự sinh compute + depends dọc theo đường dẫn quan hệ - 1 dòng thay cả method.
+- `store=True` vẫn cần nếu muốn search/group_by theo phòng ban (record rule C7 sẽ filter qua field này).
+- `readonly=True`: chặn user sửa ngược - vì sửa related có ghi ngược vào record nguồn (`hr.employee`), thường không phải điều bạn muốn.
+
 ## 4.3. Ví dụ minh họa (hóa đơn)
+
+Tình huống: kế toán yêu cầu 3 thứ cho màn hình hóa đơn - (1) tổng tiền tự cộng từ line, không nhập tay; (2) chọn khách hàng thì điều khoản thanh toán tự điền theo hồ sơ khách; (3) tuyệt đối không cho lưu hóa đơn tổng âm. Đúng 3 nhu cầu = đúng 3 decorator:
 
 ```python
 class Invoice(models.Model):
@@ -556,7 +765,11 @@ class Invoice(models.Model):
                 raise ValidationError('Tong tien khong duoc am.')
 ```
 
+Tự kiểm chứng ranh giới onchange vs compute: tạo hóa đơn bằng code `env['demo.invoice'].create({'partner_id': 1})` trong odoo shell -> `payment_term` KHÔNG được điền (onchange không chạy qua code), nhưng `amount_total` vẫn đúng (compute chạy mọi nơi).
+
 ## 4.4. Bài tập
+
+Bối cảnh: biến form OT từ "cái khung nhập liệu thô" (C3) thành form thông minh: tự tính giờ, tự điền người duyệt, và từ chối thẳng dữ liệu vô lý.
 
 Trên `ot.request.line`:
 1. `duration_hours = fields.Float(compute=..., store=True)` từ `start_datetime`/`end_datetime` (đơn vị giờ thập phân).
@@ -605,6 +818,10 @@ Paste method compute/onchange/constrains, demo case sai để thấy `Validation
 
 ### Concept 1: Statusbar
 
+**Vấn đề (Why):** Hiện tại `state` đang là dropdown thường - nghĩa là bất kỳ ai cũng có thể tự kéo phiếu của mình từ `draft` thẳng sang `approved`, không cần PM hay DL duyệt. Quy trình duyệt 2 cấp vô nghĩa. Cần: user **không sửa state trực tiếp** mà chỉ đi qua các "cánh cửa" được kiểm soát - những nút bấm chỉ hiện đúng lúc.
+
+**Giải pháp (How):**
+
 ```xml
 <header>
     <button name="action_submit" type="object" string="Submit"
@@ -616,13 +833,19 @@ Paste method compute/onchange/constrains, demo case sai để thấy `Validation
 </header>
 ```
 
-- `type="object"`: gọi method Python cùng tên `name`.
-- `states="..."`: chỉ hiển thị khi state thuộc danh sách.
-- `groups="..."`: giới hạn group thấy nút.
+**Giải thích:**
+- `type="object"` + `name="action_submit"`: bấm nút là gọi method Python **cùng tên** trên model - cách duy nhất state được phép đổi.
+- `states="draft"`: nút chỉ hiện khi record đang ở state đó -> mỗi bước chỉ thấy đúng hành động hợp lệ.
+- `widget="statusbar"`: biến dropdown thành thanh tiến trình chỉ-đọc trên header.
+- `groups="..."`: giới hạn group thấy nút - NHƯNG xem cảnh báo dưới.
 
 > ⚠️ **CHƯA thêm `groups="ot_registration.group_ot_pm"` ở chương này.** Group đó tới **C7** mới được tạo. Nếu tham chiếu external id chưa tồn tại, module sẽ lỗi `External ID not found` ngay lúc cài C5. Chương này chỉ dùng `states=`; để dành `groups=` cho C7 (xem C7 bài tập #3).
 
 ### Concept 2: Method action_*
+
+**Vấn đề (Why):** Nút bấm chỉ là vỏ - cần code thực sự làm 3 việc trong 1 cú click: chuyển state, đóng dấu thời gian, bắn mail cho người duyệt tiếp theo. Nếu 3 việc này nằm rải rác (user đổi state tay, tự nhớ gửi mail...) thì quy trình đứt gãy ngay tuần đầu.
+
+**Giải pháp (How):**
 
 ```python
 def action_submit(self):
@@ -633,7 +856,16 @@ def action_submit(self):
     return True
 ```
 
+**Giải thích:**
+- Method là "trạm gác" duy nhất của bước chuyển: mọi thứ phải xảy ra khi submit đều gom vào đây - sau này thêm logic (validate, log) cũng chỉ sửa 1 chỗ.
+- `for rec in self`: nút có thể được gọi từ list view với nhiều record (cú sốc số 1) - không viết `self.state = ...` trần.
+- `fields.Datetime.now()`: lấy giờ UTC chuẩn của Odoo - đừng dùng `datetime.now()` (giờ máy chủ, dính bẫy timezone C8).
+
 ### Concept 3: `mail.template`
+
+**Vấn đề (Why):** Có thể hardcode chuỗi HTML + subject ngay trong Python rồi gửi. Nhưng rồi phòng HR muốn sửa câu chữ trong mail -> phải sửa code, deploy lại. Mỗi loại mail (submit/approve/reject) một đoạn HTML lủng lẳng trong model. Odoo tách phần "nội dung mail" thành **template nằm trong DB**, render động theo từng record, admin sửa được qua UI.
+
+**Giải pháp (How):**
 
 ```xml
 <record id="email_template_submit_to_pm" model="mail.template">
@@ -651,7 +883,17 @@ def action_submit(self):
 </record>
 ```
 
+**Giải thích:**
+- `model_id`: template gắn với model nào -> khi render, biến `object` chính là record `ot.request` đang gửi.
+- `${object.pm_id.partner_id.email}`: cú pháp placeholder (Jinja-like) - đi xuyên quan hệ để lấy đúng mail người duyệt **của từng phiếu**.
+- `or ''` + `|safe`: phòng record thiếu email -> render ra chuỗi rỗng thay vì crash.
+- `<![CDATA[...]]>`: cho phép viết HTML thoải mái trong XML mà không phải escape từng dấu `<`.
+
 ### Concept 4: Build URL tới record
+
+**Vấn đề (Why):** PM nhận mail "có phiếu OT chờ duyệt"... rồi phải tự mở Odoo, mò vào menu, search đúng phiếu. Mỗi ngày 10 phiếu là PM bỏ duyệt. Mail phải có **link bấm phát mở đúng record**.
+
+**Giải pháp (How):**
 
 ```python
 def get_record_url(self):
@@ -660,11 +902,37 @@ def get_record_url(self):
     return '%s/web#id=%d&model=%s&view_type=form' % (base_url, self.id, self._name)
 ```
 
+**Giải thích:**
+- `web.base.url`: domain gốc của server, lưu trong System Parameters - KHÔNG hardcode `http://localhost:8069` vì lên production là link chết.
+- `.sudo()`: đọc system parameter cần quyền cao - sudo để user thường gửi mail vẫn build được link.
+- Phần `#id=...&model=...&view_type=form`: cú pháp deep-link của web client Odoo, mở thẳng form view của record.
+- `self.ensure_one()`: URL chỉ có nghĩa cho đúng 1 record (Concept 4 của C4).
+
 ### Concept 5: Gửi mail KHÔNG log chatter
-- KHÔNG dùng `record.message_post_with_template(template_id)` -> log chatter.
-- DÙNG `self.env.ref('module.template_xid').send_mail(record.id, force_send=True)` -> chỉ gửi qua queue mail.
+
+**Vấn đề (Why):** Yêu cầu nghiệp vụ của project: nội dung mail **không được hiện ở chatter**. Dùng API quen tay `message_post_with_template()` là body mail chình ình ở chatter cho mọi người có quyền xem record đọc được - sai yêu cầu, demo là bị bắt lỗi.
+
+**Giải pháp (How):**
+
+```python
+# SAI yêu cầu: log body mail vào chatter
+record.message_post_with_template(template_id)
+
+# ĐÚNG: chỉ đẩy vào queue mail, chatter sạch
+self.env.ref('module.template_xid').send_mail(record.id, force_send=True)
+```
+
+**Giải thích:**
+- `message_post_with_template`: gửi mail THÔNG QUA chatter -> mail đồng thời là 1 message trên record.
+- `template.send_mail(res_id)`: render template với record `res_id` rồi tạo thẳng `mail.mail` trong queue - không đụng chatter.
+- `force_send=True`: gửi ngay thay vì chờ cron queue chạy (tiện khi dev/test).
+- `self.env.ref('module.template_xid')`: lấy record template qua external id - đây là lý do template cần id rõ ràng.
 
 ### Concept 6: `ir.sequence` cho `name`
+
+**Vấn đề (Why):** Mã phiếu đang để user tự gõ -> 2 phiếu trùng tên `"OT tuần 23"`, không đếm được số phiếu trong năm, không tra cứu nổi khi HR hỏi "phiếu OT/2026/00123 sao rồi?". Tự sinh mã bằng `count + 1` thì dính race condition khi 2 user tạo cùng lúc. Odoo có sẵn bộ đếm an toàn: `ir.sequence`.
+
+**Giải pháp (How):**
 
 ```xml
 <record id="seq_ot_request" model="ir.sequence">
@@ -683,7 +951,15 @@ def create(self, vals):
     return super().create(vals)
 ```
 
+**Giải thích:**
+- `prefix='OT/%(year)s/'` + `padding=5` -> sinh mã dạng `OT/2026/00001`; `%(year)s` được resolve thành năm tại thời điểm lấy số.
+- Override `create`: chen vào đúng khoảnh khắc record ra đời để gán mã - `next_by_code` lấy số kế tiếp một cách atomic (không trùng dù tạo đồng thời).
+- `if vals.get('name', ...) == _('New')`: chỉ cấp mã khi user không truyền tên - tránh ghi đè dữ liệu import có mã sẵn.
+- `super().create(vals)`: vẫn phải gọi luồng tạo gốc của Odoo - quên là record không bao giờ được tạo.
+
 ## 5.3. Ví dụ minh họa
+
+Tình huống: module nghỉ phép mini - bấm "Approve" là chuyển trạng thái + nhân viên nhận được mail báo đơn đã duyệt, chatter không dính nội dung mail:
 
 ```python
 def action_approve(self):
@@ -692,7 +968,11 @@ def action_approve(self):
         self.env.ref('demo_leave.tmpl_leave_approved').send_mail(rec.id, force_send=True)
 ```
 
+Đối chiếu concept: 1 click = đổi state + gửi mail (Concept 2), gửi qua `template.send_mail` nên chatter sạch (Concept 5).
+
 ## 5.4. Bài tập
+
+Bối cảnh: đây là chương "thổi hồn" cho module - sau chương này, luồng nghiệp vụ thật chạy được từ đầu tới cuối: nhân viên submit -> PM nhận mail, bấm link, duyệt -> DL nhận mail, duyệt -> nhân viên nhận mail kết quả.
 
 1. Sequence `ot.request` qua `data/ot_sequence.xml`. Override `create` để gán `name`. Đồng thời đặt `copy=False` cho `name`, `state`, `submitted_at`, `pm_action_at`, `dl_action_at`, `reject_reason` (xem C2 Concept 5) để bản Duplicate sinh mã mới và về `draft`.
 2. Form: statusbar đầy đủ + 5 button (Submit / PM Approve / PM Reject / DL Approve / DL Reject / Reset to Draft). Chương này tạm dùng button Reject thường (C6 đổi wizard).
@@ -706,6 +986,7 @@ def action_approve(self):
 5. 4 mail templates trong `data/mail_templates.xml`. Body có URL record.
 6. Helper `get_record_url()`.
 7. Khai báo `data/` trong manifest đúng thứ tự.
+8. **Tự nghiệm thu luồng thật:** dùng dữ liệu Phụ lục A, đi trọn 1 vòng submit -> PM approve -> DL approve; kiểm tra từng mail trong Settings -> Technical -> Email -> Emails có đúng To/CC và link mở đúng phiếu.
 
 **Câu hỏi:**
 - (a) Tại sao `message_post_with_template` log chatter còn `template.send_mail` thì không? Đọc source `mail/models/mail_template.py` để giải thích.
@@ -736,6 +1017,10 @@ Paste mail template XML + method action_*, screenshot Settings -> Email -> Email
 
 ### Concept 1: `TransientModel`
 
+**Vấn đề (Why):** Nút Reject của C5 chỉ đổi state khô khan - nhân viên nhận mail "bị từ chối" mà không biết VÌ SAO, phải đi hỏi tay. Nghiệp vụ yêu cầu: bấm Reject phải bật popup **bắt buộc nhập lý do**. Popup này cần 1 form -> form cần 1 model đứng sau -> nhưng dữ liệu "đang gõ dở trong popup" mà lưu vĩnh viễn bằng `models.Model` thì bảng đầy rác (C2 Concept 1 đã cảnh báo).
+
+**Giải pháp (How):**
+
 ```python
 class RejectWizard(models.TransientModel):
     _name = 'ot.request.reject.wizard'
@@ -745,9 +1030,16 @@ class RejectWizard(models.TransientModel):
     reason = fields.Text(required=True)
 ```
 
-Bảng `ot_request_reject_wizard` tự động được Odoo dọn theo cron.
+**Giải thích:**
+- `TransientModel`: vẫn có bảng (`ot_request_reject_wizard`) để form hoạt động bình thường, nhưng record bị cron auto-vacuum dọn định kỳ - đúng vòng đời "dùng xong vứt".
+- `request_id`: sợi dây nối popup về phiếu đang bị từ chối - không có nó wizard không biết ghi lý do vào đâu.
+- `reason` với `required=True`: tầng chặn đầu tiên cho yêu cầu "bắt buộc nhập lý do" - bỏ trống là form không cho confirm.
 
 ### Concept 2: Mở wizard từ button form
+
+**Vấn đề (Why):** Hai câu hỏi kỹ thuật phải giải: (1) làm sao bấm nút trên form `ot.request` thì popup hiện ra? (2) làm sao popup **biết nó thuộc phiếu nào** để điền sẵn `request_id`?
+
+**Giải pháp (How):** 2 cách:
 
 Cách 1 (đơn giản): button `type="action" name="%(reject_action_xid)d"` + `context="{'default_request_id': active_id}"`.
 
@@ -765,9 +1057,17 @@ def action_open_reject_wizard(self):
     }
 ```
 
-`target='new'` -> mở popup.
+**Giải thích:**
+- Method action có thể **return một dict mô tả action** - Odoo nhận dict này và thực thi như 1 act_window. Đây là cách code Python "ra lệnh mở màn hình".
+- `target='new'`: mở dạng popup (dialog) thay vì thay cả trang.
+- `context={'default_request_id': self.id}`: cơ chế truyền tham số chuẩn của Odoo - key dạng `default_<field>` sẽ tự thành giá trị mặc định của field đó trên form mới. Popup vì thế "biết" nó thuộc phiếu nào.
+- Cách 2 ăn điểm hơn khi cần logic trước lúc mở (vd check state hợp lệ rồi mới cho reject).
 
 ### Concept 3: Form view có `<footer>`
+
+**Vấn đề (Why):** Đặt nút Confirm/Cancel lẫn vào giữa form như field thường -> popup không có hàng nút chuẩn ở đáy, user không nhận ra đâu là hành động chính, và bấm Cancel không đóng popup.
+
+**Giải pháp (How):**
 
 ```xml
 <form>
@@ -779,7 +1079,16 @@ def action_open_reject_wizard(self):
 </form>
 ```
 
+**Giải thích:**
+- `<footer>`: vùng nút chuẩn của dialog - convention mọi wizard Odoo, user nhìn là biết bấm đâu.
+- `special="cancel"`: nút đóng popup **không gọi code gì** - hủy thao tác đúng nghĩa.
+- `class="btn-primary"`: tô đậm hành động chính.
+
 ### Concept 4: `mail.thread` & `tracking`
+
+**Vấn đề (Why):** Tháng sau có tranh cãi: "phiếu này ai duyệt? duyệt lúc nào? tổng giờ lúc duyệt là bao nhiêu, có ai sửa sau khi duyệt không?" - không có log thì không trả lời được, mà tự xây model lịch sử thì tốn cả chương. Odoo có sẵn cơ chế audit: chatter + tracking.
+
+**Giải pháp (How):**
 
 ```python
 class OtRequest(models.Model):
@@ -790,14 +1099,28 @@ class OtRequest(models.Model):
     pm_id = fields.Many2one('res.users', tracking=True)
 ```
 
-Mỗi lần đổi field tracking, Odoo ghi 1 dòng vào `mail.tracking.value`.
+**Giải thích:**
+- `_inherit = ['mail.thread']`: "cắm" bộ chatter (message, follower, tracking) vào model - đây chính là AbstractModel của C2 Concept 1 phát huy tác dụng.
+- `tracking=True` trên field: mỗi lần field đổi giá trị qua `write`, Odoo tự ghi 1 dòng `mail.tracking.value` và hiện diff "cũ -> mới" trên chatter, kèm ai đổi & lúc nào.
+- Cần thêm `<div class="oe_chatter">...</div>` cuối form view thì chatter mới hiển thị.
 
 ### Concept 5: "log mail to chatter" vs "tracking message"
-- Mail content (gửi cho user): KHÔNG log chatter -> `template.send_mail()`.
-- Tracking message (đổi field): hiển thị ở chatter dạng system message - đây là audit log, OK.
-- Yêu cầu "không cho mail log ở comment" = body mail không hiện ở "Send message"/"Log note", nhưng "State: pm_waiting -> approved" thì OK.
+
+**Vấn đề (Why):** Nghe qua thì C5 ("không log mail vào chatter") và C6 ("tracking ghi vào chatter") có vẻ MÂU THUẪN - học viên dễ tưởng bật tracking là phạm yêu cầu cũ. Phải tách bạch 2 loại nội dung trên chatter.
+
+**Giải pháp (How):** Phân loại:
+
+- **Body mail** (nội dung gửi cho user): KHÔNG được log -> tiếp tục dùng `template.send_mail()` (C5 Concept 5).
+- **Tracking message** ("State: pm_waiting -> approved"): là system message/audit log - hiển thị ở chatter là ĐÚNG yêu cầu "lưu lịch sử".
+
+**Giải thích:**
+- Yêu cầu "không cho mail log ở comment" = body mail không xuất hiện ở khu "Send message"/"Log note".
+- Tracking message do hệ thống sinh, ngắn gọn dạng diff - không chứa nội dung mail nên không vi phạm.
+- Khi demo: chatter của 1 phiếu bị reject phải có dòng tracking đổi state, nhưng KHÔNG có đoạn HTML của mail.
 
 ## 6.3. Ví dụ minh họa
+
+Tình huống: hệ thống đặt hàng - hủy đơn phải có lý do (để báo cáo tỷ lệ hủy theo nguyên nhân). Đúng khuôn wizard sẽ dùng cho Reject OT:
 
 ```python
 class CancelWizard(models.TransientModel):
@@ -812,7 +1135,11 @@ class CancelWizard(models.TransientModel):
         return {'type': 'ir.actions.act_window_close'}
 ```
 
+Đối chiếu concept: wizard chỉ là "người đưa thư" - nó thu thập lý do rồi **ghi ngược vào record chính** qua `order_id.write(...)`; bản thân wizard sẽ bị vacuum dọn. `act_window_close` đóng popup sau khi xong.
+
 ## 6.4. Bài tập
+
+Bối cảnh: hoàn thiện trải nghiệm từ chối - PM/DL bấm Reject phải nói rõ lý do, nhân viên đọc được lý do ngay trong mail; đồng thời mọi thay đổi quan trọng trên phiếu bắt đầu được ghi vết.
 
 1. `wizard/__init__.py` + `wizard/ot_request_reject_wizard.py`:
    - `request_id` (Many2one, required), `reason` (Text, required).
@@ -848,6 +1175,10 @@ Paste wizard model + view, demo: tạo OT -> reject -> chatter chỉ có dòng t
 
 ### Concept 1: `res.groups`
 
+**Vấn đề (Why):** Hiện tại (file CSV sơ khai của C3) MỌI user nội bộ đều full quyền: nhân viên A mở được phiếu của nhân viên B, thấy cả nút "PM Approve" và... tự duyệt phiếu của chính mình. Muốn phân quyền thì trước hết phải có khái niệm "vai trò" - không thể gán quyền cho từng user một (100 nhân viên = 100 lần cấu hình).
+
+**Giải pháp (How):**
+
 ```xml
 <record id="group_ot_employee" model="res.groups">
     <field name="name">OT / Employee</field>
@@ -861,9 +1192,16 @@ Paste wizard model + view, demo: tạo OT -> reject -> chatter chỉ có dòng t
 </record>
 ```
 
-`implied_ids` -> PM kế thừa quyền Employee.
+**Giải thích:**
+- `res.groups` = vai trò. Mọi cơ chế quyền của Odoo (access CSV, record rule, `groups=` trên button/menu) đều móc vào group, không móc vào user.
+- `implied_ids`: PM "ngậm" luôn quyền Employee - PM cũng là nhân viên, cũng cần tự đăng ký OT; không có dòng này phải cấp trùng quyền 2 lần.
+- `category_id`: gom các group vào 1 mục trên form Settings -> Users cho dễ gán.
 
 ### Concept 2: `ir.model.access.csv`
+
+**Vấn đề (Why):** Có vai trò rồi nhưng quyền vẫn cào bằng. Nghiệp vụ thật: PM/DL là người DUYỆT - họ cần đọc và cập nhật phiếu, nhưng KHÔNG có lý do gì để tạo phiếu hộ người khác hay xóa phiếu. Để PM xóa được phiếu approved là mất dữ liệu chấm công.
+
+**Giải pháp (How):** Thay các dòng `base.group_user` sơ khai (C3) bằng quyền theo từng vai trò:
 
 ```csv
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
@@ -872,7 +1210,16 @@ access_ot_request_pm,access.ot.request.pm,model_ot_request,group_ot_pm,1,1,0,0
 access_ot_request_dl,access.ot.request.dl,model_ot_request,group_ot_dl,1,1,0,0
 ```
 
+**Giải thích:**
+- Mỗi dòng trả lời: "group này được Read/Write/Create/Unlink model này không?" - mức **cả model**, chưa phân biệt record nào.
+- PM/DL: `1,1,0,0` = đọc + sửa (để đổi state khi duyệt), cấm tạo/xóa.
+- User thuộc nhiều group thì quyền là **hợp (OR)** của các dòng - nhờ vậy PM (implied Employee) vẫn tạo được phiếu của mình.
+
 ### Concept 3: `ir.rule`
+
+**Vấn đề (Why):** Access right có một lỗ hổng cấu trúc: nó chỉ trả lời Yes/No cho CẢ BẢNG. Employee có `perm_read=1` nghĩa là đọc được MỌI phiếu - nhân viên A soi được phiếu OT (và qua đó, thu nhập OT) của cả công ty. Cần lớp lọc thứ 2: "được đọc, nhưng chỉ những record NÀO?"
+
+**Giải pháp (How):**
 
 ```xml
 <record id="rule_ot_request_employee_own" model="ir.rule">
@@ -883,11 +1230,16 @@ access_ot_request_dl,access.ot.request.dl,model_ot_request,group_ot_dl,1,1,0,0
 </record>
 ```
 
-- `domain_force` là Python list, eval với context `user`, `time`...
-- `groups` rỗng -> global rule.
-- Nhiều rule cùng model: OR giữa group, AND giữa global và group.
+**Giải thích:**
+- `domain_force`: domain lọc record, được eval lúc runtime với biến `user` = user đang đăng nhập -> "chỉ record do chính mình tạo". Đây là phần **động** mà CSV không làm được.
+- `groups`: rule chỉ áp cho group này. Để `groups` rỗng -> global rule, áp cho TẤT CẢ user.
+- Nhiều rule cùng model: **OR giữa các rule cùng group**, **AND giữa global rule và group rule** - nhớ quy tắc này khi debug "sao user không thấy record".
 
 ### Concept 4: Domain động phức tạp
+
+**Vấn đề (Why):** Employee thì "thấy của mình" là xong, nhưng PM/DL phức tạp hơn: DL phòng Dev không được thấy phiếu phòng QA; PM cũng không cần thấy phiếu còn `draft` (nhân viên chưa submit thì chưa tới lượt PM). Domain phải đi xuyên quan hệ và lọc cả theo state.
+
+**Giải pháp (How):**
 
 DL chỉ thấy bản ghi department mình quản lý:
 ```xml
@@ -901,12 +1253,28 @@ PM chỉ thấy của project mình quản lý:
                             ('state','in',['pm_waiting','dl_waiting','approved','rejected'])]</field>
 ```
 
+**Giải thích:**
+- `department_id.manager_id.user_id`: domain đi xuyên 3 tầng quan hệ - phiếu -> phòng ban -> trưởng phòng (employee) -> user. Chuỗi này đúng được là nhờ dữ liệu Phụ lục A gắn đúng.
+- Điều kiện `state in [...]`: phiếu chỉ "lọt vào mắt" người duyệt từ bước của họ trở đi - draft là chuyện riêng của nhân viên.
+- 2 điều kiện trong cùng list = AND.
+
 ### Concept 5: Access right vs record rule
-- Access right (CSV): "Group X có CRUD model Y không?" -> True/False.
-- Record rule: "Trong các record của Y, user X thấy được record nào?" -> filter domain.
-- Cả 2 phải pass thì user mới làm được action.
+
+**Vấn đề (Why):** Khi user báo `AccessError`, người mới thường sửa mò: thêm đại quyền vào CSV, không được thì thêm rule, loạn hết. Phải nắm rõ 2 lớp cửa để biết lỗi nằm ở cửa nào.
+
+**Giải pháp (How):** Mô hình 2 lớp:
+
+- **Lớp 1 - Access right (CSV):** "Group X có được Read/Write/Create/Unlink model Y không?" -> Yes/No cho cả model.
+- **Lớp 2 - Record rule:** "Trong các record của Y, user thấy/sửa được record NÀO?" -> filter domain.
+
+**Giải thích:**
+- Cả 2 lớp phải pass: qua được cửa CSV mới tới cửa rule. CRUD bị cấm ở CSV thì rule có mở cũng vô ích.
+- Debug: lỗi nói "not allowed to access/modify" model -> xem CSV; vẫn vào được model nhưng "không thấy record"/lỗi khi đụng record cụ thể -> xem rule.
+- Lưu ý: record không thỏa rule với user này thì với họ coi như **không tồn tại** (cả search lẫn đọc trực tiếp bằng URL).
 
 ## 7.3. Ví dụ minh họa
+
+Tình huống quen thuộc ở mọi công ty: salesman chỉ được thấy đơn hàng CỦA MÌNH, sales manager thấy hết. Module sale của Odoo giải đúng bằng record rule:
 
 ```xml
 <record id="rule_sale_own" model="ir.rule">
@@ -917,7 +1285,11 @@ PM chỉ thấy của project mình quản lý:
 </record>
 ```
 
+Manager "thấy hết" KHÔNG phải nhờ một rule mới - mà nhờ group manager không bị rule nào ràng (hoặc có rule domain `[(1,'=',1)]`). Đây cũng là cách Admin OT sẽ thấy hết ở bài tập.
+
 ## 7.4. Bài tập
+
+Bối cảnh: kịch bản nghiệm thu là đăng nhập 3 user thật (employee/pm/dl) cạnh nhau - mỗi người mở list view phải thấy một danh sách KHÁC NHAU, đúng phạm vi của mình.
 
 1. `security/ot_security.xml`:
    - `ir.module.category` `module_category_ot`.
@@ -953,6 +1325,10 @@ Paste 2 file security, login 3 user 3 group, screenshot list view khác nhau, tr
 
 ### Concept 1: Data XML với `noupdate="1"`
 
+**Vấn đề (Why):** 5 category là dữ liệu module phải TỰ TẠO khi cài (không bắt admin nhập tay từng cái). Nhưng seed bằng data XML thường có tác dụng phụ nguy hiểm: admin đổi tên "Thứ 7" thành "Saturday OT" qua UI, tháng sau dev upgrade module -> Odoo load lại XML, **ghi đè mất chỉnh sửa của admin**.
+
+**Giải pháp (How):**
+
 ```xml
 <data noupdate="1">
     <record id="ot_category_weekday" model="ot.category">
@@ -962,23 +1338,25 @@ Paste 2 file security, login 3 user 3 group, screenshot list view khác nhau, tr
 </data>
 ```
 
-`noupdate="1"` -> upgrade module KHÔNG ghi đè record (admin sửa qua UI không bị reset).
+**Giải thích:**
+- `noupdate="1"`: record chỉ được tạo lần ĐẦU cài module; các lần upgrade sau Odoo bỏ qua, không ghi đè -> chỉnh sửa của admin được giữ.
+- Trade-off phải biết: dev sửa XML rồi upgrade cũng KHÔNG thấy thay đổi (đúng thiết kế) - xem Phụ lục A.4 cách ép cập nhật khi dev.
+- `code` (`WEEKDAY`...): định danh ổn định để code Python tra category - so sánh bằng code, đừng so sánh bằng `name` (admin đổi tên là logic chết).
 
 ### Concept 2: Datetime trong Odoo
-- `fields.Datetime` lưu UTC (naive, không gắn tzinfo) trong DB.
-- `datetime.weekday()` -> 0 (Mon) .. 6 (Sun).
-- Compare giờ trong ngày phải convert timezone.
 
-**BẪY chí mạng:** `fields.Datetime.from_string(...)` trả về `datetime` **naive**. Gọi thẳng `.astimezone(tz)` trên naive datetime trong Python 3 sẽ **giả định giờ hệ thống**, KHÔNG phải UTC -> lệch giờ -> gán sai category. Đây là logic cốt lõi của project nên sai chỗ này là sai hết.
+**Vấn đề (Why):** Bug "ma" nổi tiếng nhất của người mới: user Việt Nam nhập OT bắt đầu **19h00**, code đọc `start_datetime.hour` ra... **12** -> gán nhầm category trưa thay vì tối. Không có Traceback, không có warning - chỉ có dữ liệu sai âm thầm. Lý do: `fields.Datetime` lưu **UTC** trong DB (19h VN = 12h UTC), còn logic khung giờ của bạn nghĩ theo giờ địa phương.
 
-Cách đúng (idiomatic Odoo) - dùng `context_timestamp` để Odoo tự localize từ UTC sang tz của user:
+**Giải pháp (How):** Phải localize từ UTC về timezone user TRƯỚC khi lấy giờ/thứ:
+
+Cách 1 - idiomatic Odoo, dùng `context_timestamp`:
 
 ```python
 naive_utc = fields.Datetime.from_string(self.start_datetime)  # naive, ở UTC
 local_start = fields.Datetime.context_timestamp(self, naive_utc)  # tz-aware theo user.tz
 ```
 
-Hoặc tự localize bằng pytz (tường minh hơn, dễ giải thích "tại sao"):
+Cách 2 - tự localize bằng pytz (tường minh hơn, dễ giải thích "tại sao"):
 
 ```python
 import pytz
@@ -987,7 +1365,17 @@ naive_utc = fields.Datetime.from_string(self.start_datetime)
 local_start = pytz.utc.localize(naive_utc).astimezone(tz)  # localize UTC TRƯỚC rồi mới đổi tz
 ```
 
+**Giải thích:**
+- `fields.Datetime.from_string(...)` trả về datetime **naive** (không gắn tzinfo) nhưng giá trị là UTC.
+- **BẪY chí mạng:** gọi thẳng `.astimezone(tz)` trên naive datetime - Python 3 sẽ **giả định đó là giờ hệ thống**, KHÔNG phải UTC -> lệch giờ -> gán sai category. Phải `pytz.utc.localize(...)` (đóng dấu "đây là UTC") trước, rồi mới `.astimezone(tz)`.
+- `context_timestamp(self, dt)`: Odoo tự làm 2 bước trên theo `tz` trong context/user - gọn nhưng nên hiểu nó làm gì bên dưới.
+- Sau khi có `local_start`, mới được dùng `.hour`, `.weekday()` (0=Mon .. 6=Sun) cho logic khung giờ. Đây là logic cốt lõi của project - sai chỗ này là sai hết.
+
 ### Concept 3: Quy tắc 5 category
+
+**Vấn đề (Why):** Đây là **spec nghiệp vụ** phải dịch thành code - và là chỗ dễ "dịch sai đề": nhầm ranh giới 22h thuộc khung nào, quên rằng "ban đêm" vắt qua nửa đêm (22h -> 6h **hôm sau**), lẫn lộn đêm thứ 6 (weekday-night) với đêm thứ 7 (weekend-night).
+
+**Giải pháp (How):** Bảng quy tắc chuẩn để code bám theo:
 
 | Ngày | Khung giờ | Category |
 |---|---|---|
@@ -997,17 +1385,31 @@ local_start = pytz.utc.localize(naive_utc).astimezone(tz)  # localize UTC TRƯ�
 | CN | 6h - 22h | Chủ nhật |
 | T7, CN | 22h - 6h | Cuối tuần - ban đêm |
 
+**Giải thích:**
+- Input của phép phân loại: **thứ trong tuần** (sau khi localize!) + **khung giờ** -> output: 1 trong 5 code category.
+- Mẹo so giờ lẻ (18h30): quy giờ về số thập phân `h = dt.hour + dt.minute / 60.0` rồi so `18.5 <= h < 22`.
+- Khung "22h - 6h hôm sau" là nguồn gốc edge case Concept 4: một line có thể bắt đầu ở khung này và kết thúc ở ngày khác.
+
 ### Concept 4: Edge case OT qua đêm
-Line OT từ T6 21h -> T7 2h: tách 2 line (21h-22h: weekday-night, 0h-2h: weekend-night) HOẶC dominant rule (>50% thời gian rơi vào khung). Phải bảo vệ quyết định.
+
+**Vấn đề (Why):** Line OT từ **T6 21h -> T7 2h** rơi vào 2 khung khác nhau (21h-22h: weekday; 0h-2h: weekend-night) nhưng `category_id` chỉ là MỘT Many2one - gán gì đây? Không quyết định rõ ràng và document lại, mỗi dev xử một kiểu và tester không biết đâu là "đúng".
+
+**Giải pháp (How):** 2 phương án hợp lệ - chọn 1 và **bảo vệ được quyết định**:
+1. **Tách line**: chặt thành 2 line theo mốc chuyển khung (chính xác tuyệt đối, phức tạp hơn).
+2. **Dominant rule**: gán category của khung chiếm >50% thời lượng (gọn, dễ test - lựa chọn an toàn cho bài tập này).
 
 > ⚠️ **Đừng tự ý tách line ngầm trong `create`/`write`.** Có gợi ý "override `create`/`write` để tự chặt 1 line thành 2 khi qua mốc 00:00". Nghe hay nhưng là **bẫy**:
 > - **Đệ quy**: `create`/`write` lại tạo sibling record -> dễ tự gọi lại chính nó (cần guard context cẩn thận, dễ vòng lặp vô hạn).
 > - **Mutate dữ liệu user âm thầm**: user nhập 1 line, save xong thành 2 -> UX bất ngờ, khó debug, khó test.
 > - Xung đột với `onchange` và lệnh One2many `(0,0,{})`.
->
-> Nếu muốn tách thật, làm ở **action button tường minh** ("Tách line theo khung giờ") hoặc tầng report/tính toán - KHÔNG nhét ngầm vào `create`/`write`. Ở mức bài tập này, **dominant rule** (gọn, dễ test) là lựa chọn an toàn; chỉ cần *bảo vệ được quyết định* và document trong docstring.
+
+**Giải thích:**
+- Nếu muốn tách thật, làm ở **action button tường minh** ("Tách line theo khung giờ") hoặc tầng report/tính toán - KHÔNG nhét ngầm vào `create`/`write`.
+- Dù chọn phương án nào: document quyết định + lý do trong **docstring** của method - người sau (và chính bạn ở C11 khi viết test) cần biết hành vi kỳ vọng.
 
 ## 8.3. Ví dụ minh họa
+
+Tình huống: nhà máy chia ca - cho 1 thời điểm, xác định nó thuộc ca nào. Đây là phiên bản tối giản của `_detect_category`: nhận datetime ĐÃ localize, quy giờ về thập phân, so khung:
 
 ```python
 def _detect_shift(self, dt):
@@ -1019,7 +1421,11 @@ def _detect_shift(self, dt):
     return 'night'
 ```
 
+Bài thật khó hơn ví dụ này ở đúng 2 điểm: (1) input phải localize từ UTC trước (Concept 2), (2) phải xét thêm thứ trong tuần và khoảng [start, end] thay vì 1 thời điểm.
+
 ## 8.4. Bài tập
+
+Bối cảnh: đây là "bộ não" nghiệp vụ của module - HR dùng category để tính hệ số lương OT, nên gán sai category = tính sai lương. Mọi đường dữ liệu vào (UI lẫn code) đều phải ra đúng category.
 
 1. `data/ot_category_data.xml` seed 5 record với external id rõ (vd `ot_cat_weekday`...). Bọc `<data noupdate="1">`.
 2. Trên `ot.request.line`, helper `_detect_category(self)` return `ot.category` recordset.
@@ -1029,6 +1435,7 @@ def _detect_shift(self, dt):
    - Trick: cả 2 cùng tồn tại được, hoặc chọn 1 - giải thích.
 4. Quyết định và implement xử lý OT qua đêm, document ở docstring.
 5. Manifest đăng ký data file SAU view, TRƯỚC migration.
+6. **Tự nghiệm thu:** nhập 5 line phủ đủ 5 category (1 line/khung) + 1 line qua đêm T6 21h -> T7 1h; đối chiếu category được gán với bảng Concept 3 và quyết định ở #4.
 
 **Câu hỏi:**
 - (a) Không dùng `noupdate="1"` thì khi admin đổi tên category qua UI rồi upgrade module sẽ ra sao?
@@ -1052,6 +1459,10 @@ Paste data XML + `_detect_category`, test 5 case (1 mỗi category) + 1 case qua
 
 ### Concept 1: Tree decoration
 
+**Vấn đề (Why):** DL mở list 200 phiếu chờ duyệt - yêu cầu nghiệp vụ là phiếu OT vượt 8h/lần phải được soi kỹ. Bắt DL đọc từng con số ở cột tổng giờ là kiểu UI "đánh đố"; phiếu cần chú ý phải **tự nhảy vào mắt**.
+
+**Giải pháp (How):**
+
 ```xml
 <tree decoration-danger="total_ot_hours &gt; 8"
       decoration-info="state == 'draft'"
@@ -1061,9 +1472,17 @@ Paste data XML + `_detect_category`, test 5 case (1 mỗi category) + 1 case qua
 </tree>
 ```
 
-Field dùng trong expression phải có `<field>` con (ẩn cũng được: `<field name="state" invisible="1"/>`).
+**Giải thích:**
+- `decoration-<màu>="<điều kiện Python>"`: dòng nào thỏa điều kiện được tô màu tương ứng (danger=đỏ, warning=vàng...). Điều kiện eval phía client.
+- Vì eval phía client, **field trong expression phải có mặt trong tree** dưới dạng `<field>` con - không muốn hiện cột thì để ẩn: `<field name="state" invisible="1"/>`. Quên là decoration im lặng không chạy.
+- Trong XML, `>` phải escape thành `&gt;`.
+- Điều kiện so sánh trên `total_ot_hours` chỉ chạy được vì C4 đã cho field này `store=True` - một quyết định ở C4 trả lãi ở đây.
 
 ### Concept 2: Header button trên tree
+
+**Vấn đề (Why):** Demo/test cần data: mỗi lần muốn vài phiếu OT mẫu phải điền form tay 5 phút/phiếu. Cần 1 nút "Tạo ngẫu nhiên" ngay trên list - nhưng button thường của Odoo gắn vào TỪNG record (form/row), còn nút này không thuộc record nào cả.
+
+**Giải pháp (How):**
 
 ```xml
 <tree>
@@ -1077,13 +1496,31 @@ Field dùng trong expression phải có `<field>` con (ẩn cũng được: `<fi
 </tree>
 ```
 
-Method được gọi với `self` là recordset rỗng -> phải decorate `@api.model`.
+**Giải thích:**
+- `<header>` trong `<tree>`: vùng nút cấp-list (không gắn record), xuất hiện trên đầu list view.
+- Vì không có record nào "đứng sau" cú click, method được gọi với `self` là **recordset rỗng** -> dẫn thẳng tới Concept 3.
 
 ### Concept 3: `@api.model`
-- `@api.model`: method "class-level", không cần record. Bắt buộc cho create/header button.
-- Mặc định Odoo 12 (`@api.multi`): `self` là recordset.
+
+**Vấn đề (Why):** Viết `action_create_random` như method thường rồi truy cập `self.<field>` -> không chạy như mong đợi, vì `self` rỗng (chẳng có record nào để lấy field). Cần khai báo rõ với Odoo: "method này thuộc về MODEL, không thuộc về record nào".
+
+**Giải pháp (How):**
+
+```python
+@api.model
+def action_create_random(self):
+    ...  # self ở đây chỉ dùng để gọi self.env, self.create - không đọc field
+```
+
+**Giải thích:**
+- `@api.model`: method "class-level" - dùng `self` như cánh cổng tới env/create/search, KHÔNG đọc field record. Bắt buộc cho header button và các hàm factory kiểu `create`.
+- Đối chiếu: method thường (mặc định Odoo 12 là `@api.multi`) nhận `self` = recordset các record được chọn - đúng cho nút Submit/Approve trên form.
 
 ### Concept 4: Random data
+
+**Vấn đề (Why):** Nút đã gọi được method - giờ phải tạo record bằng code: chọn đại 1 nhân viên, tạo phiếu kèm line con, và mở ngay form phiếu vừa tạo cho user xem (thay vì bắt họ tự đi tìm).
+
+**Giải pháp (How):**
 
 ```python
 import random
@@ -1103,7 +1540,17 @@ def action_create_random(self):
     }
 ```
 
+**Giải thích:**
+- `self.env['hr.employee'].search([], limit=50)`: lấy dữ liệu model khác qua `self.env` - cú sốc tư duy số 3 áp dụng thực tế.
+- `(0, 0, {vals})`: lệnh đặc biệt của One2many - "tạo record con mới với vals này" ngay trong cùng lệnh create của cha.
+- Return action dict có `res_id`: mở thẳng form của record vừa tạo (cùng kỹ thuật mở wizard ở C6 Concept 2, khác mỗi `target`).
+- Lưu ý từ C8: line tạo qua `create()` sẽ KHÔNG chạy onchange -> category đúng được là nhờ compute `store=True` (C8 bài tập #3) - đây chính là lý do cần cả hai.
+
 ### Concept 5: Search view đầy đủ
+
+**Vấn đề (Why):** Search view C3 mới có filter state cơ bản. Vận hành thật cần trả lời nhanh các câu kiểu: "OT tháng này của phòng Dev?", "phiếu nào đang chờ DL?", "tổng phiếu group theo project?" - thiếu filter/group by là user phải lọc tay.
+
+**Giải pháp (How):**
 
 ```xml
 <search>
@@ -1125,7 +1572,15 @@ def action_create_random(self):
 </search>
 ```
 
+**Giải thích:**
+- `context_today()`: hàm có sẵn trong môi trường eval domain của search view - cho phép filter "động" theo ngày hiện tại (đầu tháng này) mà không hardcode ngày.
+- `<separator/>`: ngăn nhóm filter; các filter cùng cụm bấm đồng thời sẽ OR với nhau, khác cụm là AND.
+- `create_date:month`: hậu tố `:month` gom nhóm theo tháng của field datetime (còn `:week`, `:quarter`, `:year`).
+- Group by theo `department_id`, `total_ot_hours`... hoạt động được là nhờ các field đó `store=True` (C4).
+
 ## 9.3. Ví dụ minh họa
+
+Tình huống: kế toán muốn hóa đơn giá trị lớn (>100 triệu) nổi bật đỏ trong list để ưu tiên kiểm tra:
 
 ```xml
 <tree decoration-danger="amount_total &gt; 100000000">
@@ -1134,7 +1589,11 @@ def action_create_random(self):
 </tree>
 ```
 
+Để ý: `amount_total` có mặt trong tree dưới dạng `<field>` - điều kiện bắt buộc để decoration eval được (Concept 1).
+
 ## 9.4. Bài tập
+
+Bối cảnh: chuẩn bị cho buổi demo với "khách hàng" (mentor): list view phải tự nói lên trạng thái (màu sắc), có nút bơm data demo nhanh, và bộ lọc trả lời được các câu hỏi vận hành thường gặp.
 
 1. Sửa tree `ot.request`:
    - `decoration-danger="total_ot_hours > 8"` (XML escape `&gt;`).
@@ -1167,14 +1626,27 @@ Paste XML view + method random, screenshot tree đỏ khi >8h, screenshot group 
 ## 10.2. Odoo Concepts cần biết
 
 ### Concept 1: Cơ chế migration
+
+**Vấn đề (Why):** Tình huống chắc chắn xảy ra ở production: module đã chạy 6 tháng, có 5000 phiếu OT, giờ bạn thêm field mới `employee_display_name`. Record tạo MỚI có giá trị (nhờ compute), nhưng **5000 record CŨ thì NULL** - vì compute không tự chạy ngược cho dữ liệu sinh ra trước khi field tồn tại. Báo cáo thiếu tên hàng loạt. Sửa tay 5000 dòng? Cần cơ chế chạy code "vá dữ liệu cũ" đúng MỘT lần khi nâng version.
+
+**Giải pháp (How):** Cơ chế migration theo version của Odoo:
+
 - Manifest tăng `version` (vd `12.0.1.0.0` -> `12.0.1.1.0`).
-- Khi user **Upgrade**, Odoo so sánh và chạy lần lượt `migrations/<version>/`.
+- Khi user **Upgrade**, Odoo so sánh version cũ (trong DB) với version mới (manifest) và chạy lần lượt script trong `migrations/<version>/`.
 - 3 phase script:
-  - `pre-*.py`: trước khi load XML/CSV mới (DB còn schema cũ).
-  - `post-*.py`: sau schema mới đã có column (phù hợp backfill).
-  - `end-*.py`: cuối cùng.
+  - `pre-*.py`: trước khi load XML/CSV mới (DB còn schema cũ) - dùng khi cần đổi tên column/bảng trước.
+  - `post-*.py`: sau khi schema mới đã có column - **phù hợp backfill** như bài này.
+  - `end-*.py`: chạy cuối cùng, sau mọi module.
+
+**Giải thích:**
+- Migration gắn với **version đích**: script nằm trong thư mục `12.0.1.1.0/` chỉ chạy khi DB nâng từ version thấp hơn LÊN `12.0.1.1.0`.
+- Đây là lý do C1 khăng khăng version phải format `12.0.x.y.z` - sai format là cơ chế so sánh version không nhận, script không bao giờ chạy.
 
 ### Concept 2: Anatomy script
+
+**Vấn đề (Why):** Script migration không phải code model thông thường - nó chạy ở thời điểm "tranh tối tranh sáng" giữa 2 version, nhận tham số riêng và phải tự quyết những case đặc biệt (vd DB cài mới tinh thì có gì để migrate?).
+
+**Giải pháp (How):**
 
 ```python
 # migrations/12.0.1.1.0/post-backfill_display_name.py
@@ -1191,17 +1663,31 @@ def migrate(cr, version):
     """)
 ```
 
-- `cr` là psycopg2 cursor.
-- `version` là version cũ. `if not version: return` -> bỏ qua khi cài mới.
+**Giải thích:**
+- `migrate(cr, version)`: chữ ký bắt buộc - Odoo tìm đúng hàm tên này. `cr` là psycopg2 cursor (SQL trực tiếp), `version` là version CŨ của DB.
+- `if not version: return`: DB cài mới tinh thì `version` rỗng - không có dữ liệu cũ để vá, thoát sớm.
+- `COALESCE(d.name, '')`: nhân viên chưa có phòng ban thì ghép chuỗi rỗng thay vì NULL hóa cả kết quả.
+- `LEFT JOIN` thay vì `JOIN`: không làm rớt nhân viên thiếu department.
 
 ### Concept 3: Idempotent
-- Chạy lại không lỗi, không duplicate.
-- `WHERE field IS NULL OR field = ''` để chỉ backfill ô chưa có.
+
+**Vấn đề (Why):** Thực tế vận hành: migration có thể chạy LẠI (restore backup rồi upgrade lại, upgrade nhiều server, chạy nhầm 2 lần). Script "ngây thơ" chạy lần 2 sẽ ghi đè dữ liệu admin đã sửa tay sau lần 1, hoặc nhân đôi dữ liệu. Script vá dữ liệu phải an toàn khi chạy bao nhiêu lần cũng vậy.
+
+**Giải pháp (How):** Điều kiện WHERE giới hạn đúng phần "chưa được vá":
+
+```sql
+WHERE o.employee_display_name IS NULL OR o.employee_display_name = ''
+```
+
+**Giải thích:**
+- Idempotent = chạy lại không lỗi, không duplicate, không ghi đè thứ đã có giá trị.
+- Lần 1: backfill các ô trống. Lần 2: WHERE không match dòng nào -> không làm gì. Đây là tính chất phải TEST (bài tập #3).
 
 ### Concept 4: SQL trực tiếp vs ORM trong migration
-- ORM: an toàn, có business logic, chậm với data lớn.
-- SQL: nhanh, không trigger compute -> tự build kết quả.
-- Dùng ORM trong migration:
+
+**Vấn đề (Why):** Trong migration bạn có 2 con dao: SQL thô (nhanh, nhưng "mù" nghiệp vụ - không trigger compute, không check constrains) và ORM (hiểu nghiệp vụ, nhưng chậm với data lớn và cần dựng env thủ công). Chọn sai công cụ: SQL quên tự build giá trị compute -> dữ liệu lệch; ORM trên 1 triệu dòng -> upgrade treo cả giờ.
+
+**Giải pháp (How):** Dùng ORM trong migration khi cần logic nghiệp vụ:
 
 ```python
 from odoo import api, SUPERUSER_ID
@@ -1214,7 +1700,14 @@ def migrate(cr, version):
             r.employee_id.name, r.employee_id.department_id.name or '')
 ```
 
+**Giải thích:**
+- `api.Environment(cr, SUPERUSER_ID, {})`: trong migration không có sẵn `self.env` - phải tự dựng environment từ cursor, chạy với quyền superuser.
+- Gán qua ORM -> trigger compute/constrains/tracking như thao tác bình thường; SQL thì không (bypass toàn bộ) - chính vì vậy SQL phải TỰ tính kết quả cuối (như `e.name || ' - ' || d.name` ở Concept 2).
+- Quy tắc chọn nhanh: data nhỏ hoặc logic phức tạp -> ORM; data lớn + phép biến đổi đơn giản -> SQL.
+
 ## 10.3. Ví dụ minh họa
+
+Tình huống: công ty quy định mọi partner phải có mã `code`, nhưng 3 năm dữ liệu cũ chưa có. Backfill bằng SQL, idempotent nhờ `WHERE code IS NULL`:
 
 ```python
 def migrate(cr, version):
@@ -1227,6 +1720,8 @@ def migrate(cr, version):
 ```
 
 ## 10.4. Bài tập
+
+Bối cảnh: đóng vai dev nhận nhiệm vụ "module sắp golive, dữ liệu test 6 tháng qua phải sạch": vá field thiếu cho record cũ bằng migration đúng chuẩn, rồi tự nghiệm thu toàn bộ Acceptance Criteria như 1 buổi UAT thật.
 
 1. Bump version trong `__manifest__.py` lên `12.0.1.1.0`.
 2. `migrations/12.0.1.1.0/post-backfill_employee_display_name.py`:
@@ -1272,11 +1767,24 @@ Paste script migration + manifest mới, screenshot DB trước/sau, checklist �
 ## 11.2. Odoo Concepts cần biết
 
 ### Concept 1: Các lớp test
+
+**Vấn đề (Why):** Suốt 10 chương, mỗi lần sửa code bạn nghiệm thu bằng cách... click tay lại từ đầu: tạo phiếu, submit, approve, check mail - 10 phút/lần và không ai dám chắc lần sửa thứ 20 không làm vỡ thứ đã chạy ở lần 1 (regression). Ngoài ra test mà GHI THẬT vào DB thì sau mỗi lần chạy, DB đầy dữ liệu rác test.
+
+**Giải pháp (How):** Bộ class test có sẵn của Odoo:
+
 - `odoo.tests.common.TransactionCase`: mỗi test method chạy trong 1 transaction, **tự rollback** -> test độc lập, DB sạch. Đây là loại dùng 90% trường hợp.
 - `SingleTransactionCase`: tất cả test dùng chung 1 transaction (ít dùng).
 - `HttpCase`: test cả HTTP/JS tour (nâng cao, không cần ở đây).
 
+**Giải thích:**
+- Rollback tự động giải bài toán "DB rác": test cứ create/write thoải mái, kết thúc method là mọi thay đổi bay màu.
+- Rollback theo TỪNG test method -> test A không nhìn thấy dữ liệu test B tạo - các test độc lập, fail là biết chính xác test nào.
+
 ### Concept 2: Cấu trúc thư mục test
+
+**Vấn đề (Why):** Viết test xong mà Odoo không thèm chạy - đa số do đặt sai chỗ hoặc khai báo sai kiểu: nhét vào `data` của manifest (sai - test không phải data), hoặc quên import trong `tests/__init__.py` (đúng bệnh "lỗi câm" của C1 Concept 4).
+
+**Giải pháp (How):**
 
 ```text
 ot_registration/
@@ -1285,9 +1793,15 @@ ot_registration/
 │   └── test_ot_request.py
 ```
 
-`tests/` KHÔNG khai báo trong `__manifest__.py['data']`. Odoo tự discover khi chạy `--test-enable`.
+**Giải thích:**
+- `tests/` KHÔNG khai báo trong `__manifest__.py['data']` - Odoo tự discover thư mục tên `tests/` khi chạy với `--test-enable`.
+- File test phải bắt đầu bằng `test_` và được import trong `tests/__init__.py` - thiếu import là test bị bỏ qua không một lời than phiền.
 
 ### Concept 3: Khung một test case
+
+**Vấn đề (Why):** Mỗi test đều cần "diễn viên" (employee, request...) - copy đoạn dựng dữ liệu vào từng test là lặp code; và test không theo cấu trúc chuẩn thì người sau đọc không biết đâu là chuẩn bị, đâu là hành động, đâu là kiểm chứng.
+
+**Giải pháp (How):**
 
 ```python
 from odoo.tests.common import TransactionCase
@@ -1310,7 +1824,16 @@ class TestOtRequest(TransactionCase):
         self.assertEqual(self.request.state, 'pm_waiting')
 ```
 
+**Giải thích:**
+- `setUp` chạy lại TRƯỚC MỖI test method: dữ liệu nền dựng 1 chỗ, mọi test dùng chung mà vẫn độc lập (vì rollback).
+- Trong test, `self.env` có sẵn - dùng y như trong model.
+- Mỗi test theo nhịp **Arrange - Act - Assert**: dựng dữ liệu (setUp) -> gọi hành động (`action_submit`) -> kiểm chứng (`assertEqual`). Tên test mô tả hành vi (`test_submit_moves_to_pm_waiting`) để khi fail, đọc tên là biết hỏng gì.
+
 ### Concept 4: Test một constrains raise đúng lúc
+
+**Vấn đề (Why):** Test "hành vi đúng" chưa đủ - constrains tồn tại để CHẶN dữ liệu sai, nên phải test cả chiều ngược: cố tình nhập dữ liệu sai và khẳng định hệ thống TỪ CHỐI. Nếu một ngày ai đó lỡ xóa constrains, phải có test đỏ lên báo động.
+
+**Giải pháp (How):**
 
 ```python
 def test_end_before_start_raises(self):
@@ -1322,24 +1845,40 @@ def test_end_before_start_raises(self):
         })
 ```
 
-`assertRaises` PHẢI bọc đúng dòng gây lỗi. Nếu constrains không raise, test fail -> phát hiện bug.
+**Giải thích:**
+- `with self.assertRaises(ValidationError):` đảo logic pass/fail: code trong block PHẢI nổ `ValidationError` thì test mới pass; không nổ (constrains bị mất/sai) -> test fail -> phát hiện bug.
+- `assertRaises` PHẢI bọc đúng dòng gây lỗi - bọc thừa cả đoạn setup thì lỗi setup cũng bị "nuốt" thành pass giả.
 
 ### Concept 5: Chạy test
+
+**Vấn đề (Why):** Test của Odoo không chạy bằng `pytest`/`python -m unittest` như Python thuần - vì test cần cả server Odoo + DB + registry module. Chạy sai cách là `ImportError` hoặc không có test nào được thu thập.
+
+**Giải pháp (How):**
 
 ```bash
 odoo-bin -c odoo.conf -d <db> -u ot_registration --test-enable --stop-after-init
 ```
 
-- `--test-enable`: bật chạy test khi cài/upgrade module.
-- `--stop-after-init`: chạy xong thoát, không giữ server.
-- Lọc theo tag (tùy chọn): thêm decorator `@tagged('ot')` rồi `--test-tags ot`.
+**Giải thích:**
+- `--test-enable`: bật chạy test khi cài/upgrade module - test chạy NHƯ MỘT PHẦN của quá trình upgrade (`-u ot_registration`).
+- `--stop-after-init`: chạy xong thoát, không giữ server - đọc kết quả ở log.
+- Lọc theo tag (tùy chọn): thêm decorator `@tagged('ot')` rồi `--test-tags ot` - tiện khi chỉ muốn chạy nhóm test của mình.
 
 ### Concept 6: Mẹo test phần gửi mail
-Test không nên gửi mail thật. Có 2 hướng:
+
+**Vấn đề (Why):** Test mà gửi mail THẬT thì: PM nhận spam mỗi lần CI chạy, test fail khi SMTP chết (fail không phải do code), và chạy chậm. Nhưng bỏ qua không test phần mail thì lủng một mảng nghiệp vụ chính.
+
+**Giải pháp (How):** 2 hướng, không cần gửi thật:
 - Kiểm tra **hệ quả** thay vì việc gửi: sau `action_submit`, assert `state` đổi + `submitted_at` được set.
 - Đếm `mail.mail` trong queue: `self.env['mail.mail'].search_count([...])` tăng đúng số lần, thay vì `force_send=True`.
 
+**Giải thích:**
+- Nguyên tắc: test khẳng định "hệ thống ĐÃ TẠO yêu cầu gửi mail đúng" (record `mail.mail` trong queue, đúng người nhận) - còn "queue có gửi đi nổi không" là việc của hạ tầng SMTP, không phải của code bạn.
+- Trong `TransactionCase`, record `mail.mail` cũng bị rollback - đếm queue là an toàn tuyệt đối, không mail nào thoát ra ngoài.
+
 ## 11.3. Ví dụ minh họa (demo.order)
+
+Tình huống: đơn hàng demo với 2 hành vi cần khóa: bấm confirm phải sang state `confirmed`, và tổng tiền phải tự cộng từ line - mỗi hành vi 1 test:
 
 ```python
 class TestDemoOrder(TransactionCase):
@@ -1357,6 +1896,8 @@ class TestDemoOrder(TransactionCase):
 ```
 
 ## 11.4. Bài tập
+
+Bối cảnh: chốt hạ project - chuyển toàn bộ Acceptance Checklist (C10) từ "click tay nghiệm thu" thành "chạy 1 lệnh, máy nghiệm thu". Đây cũng là lưới an toàn cho mọi lần sửa code sau golive.
 
 Tạo `tests/__init__.py` + `tests/test_ot_request.py` với tối thiểu các test sau:
 
@@ -1434,7 +1975,9 @@ env.cr.commit()   # shell KHÔNG tự commit - phải gọi tay
 
 ## B.1. Kanban view (rẻ, hợp ngữ cảnh duyệt phiếu)
 
-PM/DL thường muốn nhìn phiếu theo cột trạng thái thay vì tree. Kanban group theo `state` cho cái nhìn tổng quan tiến độ duyệt.
+**Vấn đề (Why):** PM/DL duyệt phiếu hằng ngày thường muốn cái nhìn "bảng tiến độ": cột nào đang dồn phiếu chờ - tree view không cho cảm giác đó.
+
+**Giải pháp (How):** Kanban group theo `state`:
 
 ```xml
 <record id="view_ot_request_kanban" model="ir.ui.view">
@@ -1459,13 +2002,16 @@ PM/DL thường muốn nhìn phiếu theo cột trạng thái thay vì tree. Kan
 </record>
 ```
 
+**Giải thích:**
 - Thêm `kanban` vào `view_mode` của action: `view_mode="kanban,tree,form"`.
 - `default_group_by="state"` -> tự xếp cột theo trạng thái.
-- Lưu ý: kéo-thả đổi cột = đổi `state` trực tiếp, **bỏ qua** các method `action_*` (không gửi mail, không check group). Với workflow có duyệt/mail như project này, nên để Kanban **read-only về state** (chỉ xem) hoặc chặn drag bằng cách không cho `group_create`/`records_draggable="0"`, tránh nhảy state sai luồng.
+- ⚠️ Lưu ý quan trọng: kéo-thả đổi cột = đổi `state` trực tiếp, **bỏ qua** các method `action_*` (không gửi mail, không check group). Với workflow có duyệt/mail như project này, nên để Kanban **read-only về state** (chỉ xem) hoặc chặn drag bằng cách không cho `group_create`/`records_draggable="0"`, tránh nhảy state sai luồng.
 
 ## B.2. QWeb PDF Report (mảng kỹ năng riêng)
 
-Xuất phiếu OT ra PDF để in/lưu trữ sau khi duyệt. Đây là **một chủ đề lớn riêng** (report action + paperformat + QWeb template), nên xem như mini-project.
+**Vấn đề (Why):** Phiếu OT đã duyệt cần xuất PDF để in/lưu trữ/đính kèm hồ sơ lương. Đây là **một chủ đề lớn riêng** (report action + paperformat + QWeb template), nên xem như mini-project.
+
+**Giải pháp (How):**
 
 ```xml
 <!-- report/ot_request_report.xml -->
@@ -1505,10 +2051,10 @@ Xuất phiếu OT ra PDF để in/lưu trữ sau khi duyệt. Đây là **một 
 </template>
 ```
 
-Concept then chốt nếu làm phần này:
+**Giải thích - concept then chốt nếu làm phần này:**
 - `docs` là biến mặc định Odoo truyền vào (recordset đang in).
 - `web.external_layout` = header/footer công ty sẵn có; `web.html_container` bọc ngoài.
-- `t-field` render có format theo kiểu field (date/datetime theo tz), khác `t-esc` (raw).
+- `t-field` render có format theo kiểu field (date/datetime theo tz - lại là bài học C8!), khác `t-esc` (raw).
 - Đăng ký file report trong manifest `data`. Nút "Print" tự xuất hiện nhờ `binding_model_id`.
 - Cân nhắc chỉ cho in khi `state == 'approved'`.
 
@@ -1529,3 +2075,4 @@ Concept then chốt nếu làm phần này:
 | 9. UI: Decoration + Button list | [ ] | | |
 | 10. Migration + Acceptance | [ ] | | |
 | 11. Automated Testing | [ ] | | |
+

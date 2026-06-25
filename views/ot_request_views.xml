@@ -1,0 +1,57 @@
+<odoo>
+  <!-- Tree View -->
+  <record id="view_ot_request_tree" model="ir.ui.view">
+    <field name="name">ot.request.tree</field>
+    <field name="model">ot.request</field>
+    <field name="arch" type="xml">
+      <tree string="OT Request">
+        <field name="name"/>
+        <field name="employee_id"/>
+        <field name="project_id"/>
+        <field name="pm_id"/>
+        <field name="dl_id"/>
+        <field name="state"/>
+      </tree>
+    </field>
+  </record>
+
+  <!-- Form View -->
+  <record id="view_ot_request_form" model="ir.ui.view">
+    <field name="name">ot.request.form</field>
+    <field name="model">ot.request</field>
+    <field name="arch" type="xml">
+      <form string="OT Registration">
+        <header>
+          <!-- 🔜 C5: 5 nút workflow (Submit/PM/DL/Reject/Reset) -->
+          <field name="state" widget="statusbar"
+                statusbar_visible="draft,to_approve_pm,to_approve_dl,approved,reject"/>
+        </header>
+        <sheet>
+          <div class="oe_title"><h1><field name="name" readonly="1"/></h1></div>
+          <group>
+            <group>                                  <!-- cột TRÁI -->
+              <field name="project_id"/>
+              <field name="ot_month"/>
+              <!-- 🔜 C4: <field name="pm_id" readonly="1" options="{'no_open':True}"/> -->
+            </group>
+            <group>                                  <!-- cột PHẢI ⭐ -->
+              <field name="employee_id"/>
+              <field name="request_date"/>
+              <!-- 🔜 C4: employee_custom_name, dl_id, total_actual_hours -->
+              <!-- 🔜 C5: deadline_date, late_approved (+ alert div) -->
+            </group>
+          </group>
+          <notebook>
+            <page string="OT Request Lines">
+              <field name="line_ids">
+                <!-- 👇 MS2: tree inline ngay tại đây (xem dưới) -->
+              </field>
+            </page>
+          </notebook>
+        </sheet>
+        <!-- 🔜 C6: <div class="oe_chatter"> -->
+      </form>
+    </field>
+  </record>
+
+</odoo>

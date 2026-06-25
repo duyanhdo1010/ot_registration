@@ -9,6 +9,8 @@
 > - **Giải thích:** tác dụng của các dòng code chính.
 >
 > Quy ước: Phần "Ví dụ minh họa" dùng domain khác (thư viện, hóa đơn...) để học khái niệm. Bài tập mới là code thật của project.
+>
+> 📌 **Convention build theo BẢN THAM KHẢO** (`ot_registration/ot_registration/`): khi Roadmap lệch reference → **theo reference**. Các điểm lệch chính: tên state `to_approve_pm / to_approve_dl / reject`; field line `from_date/to_date` (thay `start/end_datetime`, bỏ `ot_date`); `pm_id/dl_id` kiểu `hr.employee` (compute); gộp toàn bộ view vào 1 file + **line tree nhúng inline** (không tách file). Bảng đối chiếu đầy đủ + tiến độ: xem `CODE_ALONG.md`.
 
 ---
 
@@ -604,7 +606,7 @@ Bối cảnh: sau chương này, một nhân viên (user thường, không phả
    - Tree: cột chính.
    - Search: field employee/project/dept; filter theo state.
    - Action + menu.
-3. `views/ot_request_line_views.xml`: chỉ tree dùng nội bộ.
+3. `views/ot_request_line_views.xml`: chỉ tree dùng nội bộ. *(📌 Theo reference: KHÔNG tách file — nhúng `<tree>` inline vào `<field name="line_ids">` của form, và bỏ dòng này khỏi `manifest['data']`. Xem CODE_ALONG §C3.)*
 4. `security/ir.model.access.csv` sơ khai (Concept 6): cấp full CRUD cho `base.group_user` trên 3 model.
 5. Khai báo trong `__manifest__.py['data']` (security LÊN ĐẦU):
    ```python

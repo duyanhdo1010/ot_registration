@@ -4,7 +4,11 @@
     'category': 'Human Resources',
     'summary': 'Quan ly dang ky OT',
     'depends': ['base', 'mail', 'hr', 'project'],
-    'data': [],
+    'data': [
+        'security/ir.model.access.csv',
+        'views/ot_category_views.xml',
+        'views/ot_request_views.xml',
+    ],
     'installable': True,
     'application': True,
     'license': 'LGPL-3',

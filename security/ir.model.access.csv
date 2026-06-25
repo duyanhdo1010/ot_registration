@@ -1,0 +1,4 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_ot_request_user,access.ot.request.user,model_ot_request,base.group_user,1,1,1,1
+access_ot_request_line_user,access.ot.request.line.user,model_ot_request_line,base.group_user,1,1,1,1
+access_ot_category_user,access.ot.category.user,model_ot_category,base.group_user,1,1,1,1

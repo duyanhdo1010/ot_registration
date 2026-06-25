@@ -11,12 +11,14 @@ class OtRequest(models.Model):
     pm_id = fields.Many2one('res.users', string='Project Manager')
     dl_id = fields.Many2one('res.users', string='Department Leader')
     state = fields.Selection([
-        ('draft', 'Draft'),
-        ('pm_waiting', 'Waiting PM'),
-        ('dl_waiting', 'Waiting DL'),
-        ('approved', 'Approved'),
-        ('rejected', 'Rejected'),
-    ], string='Status', default='draft')
+        ('draft', 'Nháp'),
+        ('to_approve_pm', 'Chờ PM duyệt'),
+        ('to_approve_dl', 'PM đã duyệt'),
+        ('approved', 'Đã duyệt'),
+        ('reject', 'Từ chối'),
+    ], string='Trạng thái', default='draft')
+    ot_month     = fields.Char(string='Tháng OT', required=True)
+    request_date = fields.Datetime(string='Ngày tạo đơn', default=fields.Datetime.now, readonly=True)
     reject_reason = fields.Text(string='Reject Reason')
     submitted_at = fields.Datetime(string='Submitted At', readonly=True)
     pm_action_at = fields.Datetime(string='PM Action At', readonly=True)

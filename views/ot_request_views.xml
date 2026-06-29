@@ -1,4 +1,33 @@
 <odoo>
+  <!-- Search View -->
+  <record id="view_ot_request_search" model="ir.ui.view">
+    <field name="name">ot.request.search</field>
+    <field name="model">ot.request</field>
+    <field name="arch" type="xml">
+      <search string="Tìm đơn OT">
+        <!-- 1) Ô gõ tìm -->
+        <field name="name" string="Mã đơn"/>
+        <field name="employee_id"/>
+        <field name="project_id"/>
+
+        <!-- 2) Filter lọc -->
+        <filter name="my_requests" string="Đơn của tôi"
+                domain="[('employee_id.user_id','=',uid)]"/>
+        <separator/>
+        <filter name="f_pm" string="Chờ PM" domain="[('state','=','to_approve_pm')]"/>
+        <filter name="f_dl" string="Chờ DL" domain="[('state','=','to_approve_dl')]"/>
+        <filter name="f_approved" string="Đã duyệt" domain="[('state','=','approved')]"/>
+        <filter name="f_reject" string="Từ chối" domain="[('state','=','reject')]"/>
+
+        <!-- 3) Gom nhóm -->
+        <group expand="0" string="Gom nhóm theo">
+          <filter name="gb_state" string="Trạng thái" context="{'group_by':'state'}"/>
+          <filter name="gb_project_id" string="Project" context="{'group_by':'project_id'}"/>
+          <filter name="gb_employee_id" string="Nhân viên" context="{'group_by':'employee_id'}"/>
+        </group>
+      </search>
+    </field>
+  </record>
   <!-- Tree View -->
   <record id="view_ot_request_tree" model="ir.ui.view">
     <field name="name">ot.request.tree</field>
@@ -32,19 +61,31 @@
             <group>                                  <!-- cột TRÁI -->
               <field name="project_id"/>
               <field name="ot_month"/>
-              <!-- 🔜 C4: <field name="pm_id" readonly="1" options="{'no_open':True}"/> -->
+              <field name="pm_id" readonly="1" options="{'no_open':True}"/>
             </group>
             <group>                                  <!-- cột PHẢI ⭐ -->
               <field name="employee_id"/>
               <field name="request_date"/>
-              <!-- 🔜 C4: employee_custom_name, dl_id, total_actual_hours -->
+              <field name="dl_id" readonly="1" options="{'no_open':True}"/>
+              <!-- 🔜 C4: employee_custom_name, total_actual_hours -->
               <!-- 🔜 C5: deadline_date, late_approved (+ alert div) -->
             </group>
           </group>
           <notebook>
             <page string="OT Request Lines">
-              <field name="line_ids">
-                <!-- 👇 MS2: tree inline ngay tại đây (xem dưới) -->
+              <field name="line_ids" attrs="{'readonly':[('state','not in',['draft','reject'])]}">
+                <tree editable="bottom">
+                  <field name="from_date"/>
+                  <field name="to_date"/>
+                  <field name="category_id"/>
+                  <field name="wfh_bz"/>
+                  <field name="ot_registration_hours"/>
+                  <field name="actual_ot_hours"/>
+                  <field name="reason"/>
+                  <field name="evidences"/>
+                  <!-- 🔜 C8: is_unknown_category invisible + decoration-danger -->
+                  <!-- 🔜 C5: late_approved -->
+                </tree>
               </field>
             </page>
           </notebook>
@@ -54,4 +95,14 @@
     </field>
   </record>
 
+  <!-- Menu -->
+  <record id="action_ot_request" model="ir.actions.act_window">
+    <field name="name">OT Registration</field>
+    <field name="res_model">ot.request</field>
+    <field name="view_mode">tree,form</field>
+  </record>
+
+  <menuitem id="menu_ot_root" name="OT Registration" sequence="10"/>
+  <menuitem id="menu_ot_request" name="OT Requests"
+            parent="menu_ot_root" action="action_ot_request" sequence="1"/>
 </odoo>

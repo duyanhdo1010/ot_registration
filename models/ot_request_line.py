@@ -8,11 +8,11 @@ class OtRequestLine(models.Model):
     request_id = fields.Many2one(
         'ot.request', string='OT Request',
         required=True, ondelete='cascade')
-    from_date  = fields.Datetime(string='Giờ Bắt đầu', required=True, default=fields.Datetime.now)
-    to_date    = fields.Datetime(string='Kết thúc', required=True, default=fields.Datetime.now)
+    from_date  = fields.Datetime(string='From', required=True, default=fields.Datetime.now)
+    to_date    = fields.Datetime(string='To', required=True, default=fields.Datetime.now)
     wfh_bz     = fields.Selection([('wfh','WFH'),('bz','BZ')], string='WFH/BZ', required=True)
-    ot_registration_hours = fields.Float(string='Giờ OT đăng ký')
-    actual_ot_hours       = fields.Float(string='Giờ OT thực tế')
-    reason     = fields.Char(string='Lý do OT', default='N/A')
-    evidences  = fields.Binary(string='Minh chứng')
+    ot_registration_hours = fields.Float(string='OT Registration Hours')
+    actual_ot_hours       = fields.Float(string='Actuan OT hours')
+    reason     = fields.Char(string='Reason')
+    evidences  = fields.Binary(string='Evidences')
     category_id = fields.Many2one('ot.category', string='OT Category')

@@ -29,8 +29,8 @@
 |---|---|---|---|
 | 1. Skeleton & Manifest | ✅ | — | manifest chuẩn (depends/version/data) |
 | 2. Models (3 model) | ✅ | — | field cơ bản; compute/tracking để dành C4/C6 |
-| 3. Views / Menu / Action | 🔶 | | theo reference: gộp view 1 file, line tree inline, bỏ file line riêng + view category |
-| 4. Compute / Onchange / Constrains | ⬜ | | **CHẬM LẠI** — chương thử lửa #1 |
+| 3. Views / Menu / Action | ✅ | 2026-06-29 | theo reference: gộp view 1 file, line tree inline; nghiệm thu pass |
+| 4. Compute / Onchange / Constrains | 🔶 | | **CHẬM LẠI** — thử lửa #1 · MS1 ✅ · đang **MS2** |
 | 5. Workflow + Mail | ⬜ | | |
 | 6. Wizard + Tracking | ⬜ | | |
 | 7. Security & Record Rules | ⬜ | | cần Phụ lục A trước khi test |
@@ -39,7 +39,7 @@
 | 10. Migration + Acceptance | ⬜ | | |
 | 11. Automated Testing | ⬜ | | |
 
-**👉 Đang ở:** C3 — MS0 (pre-step model) → MS1/MS2 (form + line tree inline).
+**👉 Đang ở:** 🔶 **C4**, MS1 ✅ (pm_id/dl_id compute store — nghiệm thu pass), đang **MS2** (`employee_custom_name` = `Tên <Phòng ban>`).
 
 ---
 
@@ -89,13 +89,13 @@
 
 - [x] `security/ir.model.access.csv` sơ khai (full CRUD `base.group_user`)
 - [x] Tree `ot.request` (đã thêm `model="ir.ui.view"`, bỏ `line_ids`)
-- [ ] **MS0 — Pre-step model**: đổi state → tên reference; thêm field phẳng (`ot_month`,`request_date`; line: `from_date`/`to_date` thay `start/end`, `wfh_bz`,`ot_registration_hours`,`actual_ot_hours`,`reason`,`evidences`) ⭐
-- [~] **MS1 — Form `ot.request`** (reference): header statusbar + oe_title + group 2 cột + notebook ⭐
-- [ ] **MS2 — Line tree INLINE** trong form (theo reference, KHÔNG file riêng) + gỡ `views/ot_request_line_views.xml` khỏi manifest ⭐
-- [ ] **MS3 — Search `ot.request`**: field name/employee/project + filter state + group by ⭐
-- [ ] **MS4 — Action + Menu** `ot.request` (`menu_ot_root` → `menu_ot_request`)
+- [x] **MS0 — Pre-step model**: đổi state → tên reference; thêm field phẳng (`ot_month`,`request_date`; line: `from_date`/`to_date` thay `start/end`, `wfh_bz`,`ot_registration_hours`,`actual_ot_hours`,`reason`,`evidences`) — +fix `name` default='New'
+- [x] **MS1 — Form `ot.request`** (reference): header statusbar + oe_title + group 2 cột + notebook
+- [x] **MS2 — Line tree INLINE** trong form (theo reference, KHÔNG file riêng) + gỡ `views/ot_request_line_views.xml` khỏi manifest
+- [x] **MS3 — Search `ot.request`**: field name/employee/project + 4 filter state (OR) + group by state/project/employee
+- [x] **MS4 — Action + Menu** `ot.request` (`menu_ot_root` → `menu_ot_request`)
 - ~~MS5 — view `ot.category`~~ → **BỎ** theo reference (category quản lý qua seed data ở C8)
-- [ ] Nghiệm thu: user thường CRUD được, không warning "no access rules"
+- [x] Nghiệm thu: Create → thêm line inline → Save → filter "Đơn của tôi" + group by ✅ (state vẫn draft là đúng — workflow ở C5)
 
 <details>
 <summary>📖 <b>Hướng dẫn mentor — C3</b></summary>
@@ -185,19 +185,93 @@
 - **Bỏ MS5** (view `ot.category`): reference không có; category seed data ở C8.
 - Tên state + tên field line theo reference (MS0). Bảng đối chiếu đầy đủ ở mục "🎯 Bản tham khảo" đầu file.
 
-### ⬜ MS3 (Search) / MS4 (Action + Menu) — (chưa pair tới)
+### 🟢 MS3 — Search `ot.request`
+**Kiến thức:** Roadmap C3 Concept 3 (căn bản field/filter/group_by) + C9 Concept 5 (search đầy đủ); reference `ot_registration/views/ot_request_views.xml:22-48`. Search view **không** cần khai trong action — Odoo tự nhặt mặc định.
+
+```xml
+<record id="view_ot_request_search" model="ir.ui.view">
+  <field name="name">ot.request.search</field>
+  <field name="model">ot.request</field>
+  <field name="arch" type="xml">
+    <search string="Tìm đơn OT">
+      <field name="name" string="Mã đơn"/>
+      <field name="employee_id"/>
+      <field name="project_id"/>
+      <filter name="my_requests" string="Đơn của tôi" domain="[('employee_id.user_id','=',uid)]"/>
+      <separator/>
+      <filter name="f_pm" string="Chờ PM" domain="[('state','=','to_approve_pm')]"/>
+      <!-- ⭐ TODO: Chờ DL / Đã duyệt / Từ chối -->
+      <group expand="0" string="Gom nhóm theo">
+        <filter name="gb_state" string="Trạng thái" context="{'group_by':'state'}"/>
+        <!-- ⭐ TODO: group by project_id, employee_id -->
+      </group>
+    </search>
+  </field>
+</record>
+```
+
+**🎯 Your Turn:** điền 3 filter state còn lại + 2 group_by; trả lời (a) `uid` là gì vs `user.id` ở C7? (b) `<separator/>` đổi quan hệ filter (OR/AND)? ⚠️ chỉ dùng field đã có (`name/employee_id/project_id/state`).
+
+### 🟢 MS4 — Action + Menu
+**Kiến thức:** Roadmap C3 Concept 4 (~dòng 513–534) + Concept 5 (external id, thứ tự load); reference `ot_registration/views/ot_request_views.xml:167-174`. Đặt ở CUỐI file (sau các record view): action phải khai TRƯỚC menuitem ref nó; menu cha TRƯỚC menu con.
+
+```xml
+<record id="action_ot_request" model="ir.actions.act_window">
+  <field name="name">OT Registration</field>
+  <field name="res_model">ot.request</field>
+  <field name="view_mode">tree,form</field>
+</record>
+<menuitem id="menu_ot_root" name="OT Registration" sequence="10"/>
+<menuitem id="menu_ot_request" name="OT Requests"
+          parent="menu_ot_root" action="action_ot_request" sequence="1"/>
+```
+
+**🎯 Your Turn:** (a) `view_mode="tree,form"` — vào thấy gì trước? (b) menu_ot_root không có `action` → bấm vào ra gì? (c) đảo menu con lên trước action → lỗi gì? **Nghiệm thu C3:** mở menu → tạo phiếu (name='New') → thêm line inline → save → test filter "Chờ PM" + group by state.
 
 </details>
 
-## CHƯƠNG 4 — Compute / Onchange / Constrains ⬜ ⚠️ CHẬM LẠI
+## CHƯƠNG 4 — Compute / Onchange / Constrains 🔶 ⚠️ CHẬM LẠI (thử lửa #1)
 
-- [ ] `ot.request.line.duration_hours` compute `store=True` (từ start/end) ⭐
-- [ ] `ot.request.total_ot_hours` compute `store=True` (từ `line_ids.duration_hours`) ⭐
-- [ ] `department_id` related từ `employee_id.department_id`, `store=True`
-- [ ] `employee_display_name` compute `store=True` — quyết định live vs snapshot ⭐
-- [ ] Onchange `project_id` → fill `pm_id`; onchange `employee_id`/`department_id` → fill `dl_id` ⭐
-- [ ] Constrains: `end > start`; submit ≤ 2 ngày; line không trùng/đè giờ ⭐
-- [ ] Micro-test sớm: `tests/test_compute.py` (duration_hours + end>start)
+> Theo **reference convention**. Mỗi MS: mentor scaffold (field + `@api.depends` + khung), ⭐ học viên viết thân.
+
+- [x] **MS1** ✅ — `pm_id`/`dl_id` đổi `res.users`→`hr.employee` + **compute store** (nghiệm thu pass: bản ghi mới tự điền PM+DL)
+  - [x] `_compute_pm_id` (search hr.employee theo `project_id.user_id.id`, có guard rỗng + `.sudo()`)
+  - [x] `_compute_dl_id` (`employee_id.parent_id`)
+  - [x] Đưa `pm_id`/`dl_id` lên form (`readonly` + `no_open`)
+- [~] **MS2** — `employee_custom_name` compute store = `Tên <Phòng ban>` ⭐ *(scaffold sẵn trong `ot_request.py` — điền thân + lên form ở session sau)*
+- [ ] **MS3** — `total_actual_hours` compute store = Σ `line_ids.actual_ot_hours` ⭐
+- [ ] **MS4** — line: `ot_registration_hours`/`actual_ot_hours` theo khoảng giờ (onchange + localize tz) ⭐ *(category để C8)*
+- [ ] **MS5** — constrains `to_date > from_date` + chống trùng/đè giờ trong cùng đơn ⭐
+- [ ] Micro-test sớm (tùy chọn): `tests/test_compute.py`
+
+> **2 ngã rẽ chốt sau:** (1) MS4 onchange (reference) vs compute store (Roadmap). (2) Luật "submit ≤ 2 ngày" thuộc `action_submit` (**C5**), KHÔNG phải constrain C4 — bản nháp được giữ ngày cũ, chỉ chặn lúc *gửi*.
+
+<details>
+<summary>📖 <b>Hướng dẫn mentor — C4</b></summary>
+
+### 🧠 Mô hình tư duy (chọn đúng công cụ)
+- **related** = kéo thẳng field từ bản ghi khác (cứng). **compute store** = server tính + lưu DB → lọc/group/domain/code dùng được, tự cập nhật theo `@api.depends`. **onchange** = chỉ chạy trên form mở, gợi ý trước Save, KHÔNG chạy khi tạo bằng code. **constrains** = gác cổng, raise `ValidationError` chặn Save.
+- Quy tắc: cái gì cần đúng **kể cả khi tạo bằng code** ⇒ compute store (hoặc compute + onchange).
+
+### ✅ MS1 — pm_id/dl_id (compute store) — *XONG, nghiệm thu pass*
+> 🐞 Bài học debug: "field trống" lần đầu KHÔNG phải bug — bản ghi cũ (tạo trước khi có compute) bị *stale*, compute store không tự backfill cột đã tồn tại. 3 tầng kiểm tra khi field trống: code đúng? → code đã nạp (server mới)? → compute đã chạy (bản ghi mới/depends đổi)? Xác minh field name Odoo 12: `project.project.user_id` (PM), `hr.employee.parent_id` (Manager) — đều đúng.
+**Vì sao store=True:** C7 record rule "PM thấy đơn dự án mình" cần lọc theo `pm_id` trong domain → field non-stored không lọc/group được.
+**Scaffold đã đặt trong `ot_request.py`:** đổi field sang `hr.employee` + `compute=...,store=True,ondelete='restrict'`; 2 method `_compute_pm_id`/`_compute_dl_id` có `@api.depends` + placeholder `= False` (no-op để server boot).
+**⭐ Your Turn:**
+- `_compute_pm_id`: PM = hr.employee của `project_id.user_id` (search `user_id`, cân nhắc `.sudo()`, xử lý project chưa có user).
+- `_compute_dl_id`: DL = `employee_id.parent_id` (xử lý rỗng).
+- Đưa `pm_id` (cột trái, `readonly="1" options="{'no_open':True}"`) + `dl_id` (cột phải) lên form — uncomment chỗ `🔜 C4`.
+**Review hỏi:** (a) bỏ `store=True` thì C7 lọc theo pm_id hỏng ở đâu? (b) vì sao cần `.sudo()` trong compute? (c) `_compute_dl_id` nên `@api.depends('employee_id')` hay thêm `'employee_id.parent_id'`? khác nhau khi nào? (d) `ondelete='restrict'` trên field compute store nghĩa là gì khi xóa nhân viên?
+
+### 🟡 MS2 — employee_custom_name (compute store) — *đang làm*
+**Mục tiêu:** field Char hiển thị `Tên <Phòng ban>` (vd `Mitchell Admin <Management>`). Nguồn: `employee_id.name` + `employee_id.department_id.name`.
+**Quyết định thiết kế (⭐ cần hiểu):** *live* (compute store + depends → tự đổi khi NV đổi phòng) vs *snapshot* (đóng băng lúc tạo, set trong `create()`). Reference dùng **live**; thực tế payroll nhiều khi muốn snapshot. Bám reference = live.
+**Scaffold:** field `employee_custom_name = Char(compute='_compute_employee_custom_name', store=True)` + method có `@api.depends('employee_id','employee_id.department_id')` + placeholder.
+**⭐ Your Turn:** ghép chuỗi `f"{name} <{dept}>"`; xử lý NV chưa có phòng ban; nhánh `else` khi chưa có employee. Đưa field lên form (cột phải, readonly).
+
+### 🟢 MS3–MS5 *(chưa pair tới — điền khi đến)*
+
+</details>
 
 ## CHƯƠNG 5 — Workflow + Mail ⬜
 
@@ -261,7 +335,12 @@
 
 | Ngày | Chương/MS | Nội dung |
 |---|---|---|
-| 2026-06-24 | C3 | Chốt theo reference: thêm MS0 (rename state + field line), MS1/MS2 reference-shaped, line tree inline, bỏ MS5; thêm callout vào Roadmap |
-| 2026-06-24 | — | Thêm mục "Bản tham khảo" + bảng đối chiếu Roadmap↔Reference; ghi chú reference cho C3 |
-| 2026-06-24 | C3 | Backfill khối "Hướng dẫn mentor" (fix tree + MS1 Form + MS2 line tree) vào dashboard |
-| 2026-06-24 | — | Chuyển sang chế độ CODE-ALONG; dựng dashboard; xác nhận C1-C2 ✅, C3 đang dở |
+| 2026-06-29 | C4·MS2 | ▶️ Mở **MS2** (`employee_custom_name` = `Tên <Phòng ban>`). |
+| 2026-06-29 | C4·MS1 | ✅ **MS1 pass.** Học viên điền `_compute_pm_id` (guard rỗng + `.id` + `.sudo()`) + `_compute_dl_id` (`employee_id.parent_id`) + đưa field lên form. Bug "field trống" = bản ghi cũ stale (compute store không backfill cột cũ), KHÔNG sửa code. Field name Odoo 12 đã xác minh. |
+| 2026-06-29 | C3 | ✅ **ĐÓNG C3** — MS4 action+menu + nghiệm thu pass. Blocker "cache" = 3 server odoo song song (đã kill). Sang C4. |
+| 2026-06-29 | C3 | ✅ MS3 search (4 filter state OR + group by). Sang MS4 (action+menu) → nghiệm thu C3. |
+| 2026-06-29 | C3 | ✅ MS0/MS1/MS2 (model + form + line tree inline; fix name default='New'). Sang MS3 (search). |
+| 2026-06-29 | C3 | Chốt theo reference: thêm MS0 (rename state + field line), MS1/MS2 reference-shaped, line tree inline, bỏ MS5; thêm callout vào Roadmap |
+| 2026-06-29 | — | Thêm mục "Bản tham khảo" + bảng đối chiếu Roadmap↔Reference; ghi chú reference cho C3 |
+| 2026-06-29 | C3 | Backfill khối "Hướng dẫn mentor" (fix tree + MS1 Form + MS2 line tree) vào dashboard |
+| 2026-06-29 | — | Chuyển sang chế độ CODE-ALONG; dựng dashboard; xác nhận C1-C2 ✅, C3 đang dở |

@@ -10,7 +10,7 @@
 - **Project:** module Odoo 12 `ot.registration` — quản lý đăng ký OT. Spec: [README.md](README.md). Giáo trình: [Roadmap.md](Roadmap.md).
 - **Chế độ làm việc:** CODE-ALONG (mentor đưa concept + skeleton, học viên hoàn thiện logic; mentor KHÔNG code thay phần nghiệp vụ). Luật + tiến độ đầy đủ ở [CODE_ALONG.md](CODE_ALONG.md).
 - **Convention đã chốt:** **theo BẢN THAM KHẢO** `ot_registration/ot_registration/` (state `to_approve_pm/to_approve_dl/reject`, line `from_date/to_date`, gộp view 1 file + line tree inline). Bảng đối chiếu: mục "🎯 Bản tham khảo" trong CODE_ALONG.
-- **Đang ở:** 🔶 **C4 — Compute/Onchange/Constrains** (thử lửa #1, đạp phanh). **MS1 ✅ + MS2 ✅ + MS3 ✅ + MS4 ✅** (pm_id/dl_id + employee_custom_name + total_actual_hours + ot_registration_hours, compute store — nghiệm thu pass). Đang **MS5**: constrains `to_date > from_date` + chống trùng/đè giờ. Plan MS1→MS5 ở [CODE_ALONG.md](CODE_ALONG.md) §C4.
+- **Đang ở:** ✅ **C4 HOÀN TẤT** (thử lửa #1 xong). MS1–MS5 pass: pm_id/dl_id + employee_custom_name + total_actual_hours + ot_registration_hours (compute store ×4) + 2 constrains (`_check_date_order`, `_check_no_overlap`). Sẵn sàng sang 🟢 **C5 — Workflow + Mail**. Plan chi tiết ở [CODE_ALONG.md](CODE_ALONG.md) §C5.
 - **📌 Bài học chốt MS4 (đừng quên ở C8):** tính **duration** (số giờ giữa 2 mốc) **KHÔNG cần timezone** — hiệu 2 mốc UTC = hiệu 2 mốc local. Bẫy tz THẬT nằm ở **C8** khi lấy `.hour/.weekday()` để phân loại category. MS4 đã bỏ hẳn pytz.
 
 ---
@@ -44,17 +44,17 @@ Get-NetTCPConnection -LocalPort 8069 -State Listen | Select OwningProcess
 
 ---
 
-## ⏭️ VIỆC TIẾP THEO — C4 / MS5 (bắt đầu session sau)
+## ⏭️ VIỆC TIẾP THEO — C5 Workflow + Mail (bắt đầu session sau)
 
-**MS1 ✅** `pm_id`/`dl_id` → `hr.employee` compute store. **MS2 ✅** `employee_custom_name` = `Tên <Phòng ban>` compute store (Live). **MS3 ✅** `total_actual_hours` = `sum(line_ids.mapped('actual_ot_hours'))` compute store. **MS4 ✅** `ot_registration_hours` = `(to_date-from_date).total_seconds()/3600.0` compute store (`@api.depends('from_date','to_date')`, guard rỗng, **không import timedelta / không pytz** — duration bất biến với tz); `actual_ot_hours` giữ nhập tay. Nghiệm thu `19:00→21:30 = 2.50` pass.
+**C4 ✅ ĐÓNG TRỌN** — compute store ×4 (pm_id/dl_id, employee_custom_name, total_actual_hours, ot_registration_hours) + 2 constrains (`_check_date_order` = `to_date > from_date`; `_check_no_overlap` = chống đè giờ trong cùng đơn, formula `<`/`<`, loại self). Nghiệm thu pass.
 
-**MS5 — constrains trên `ot.request.line`.** ⚠️ **Chưa có scaffold.**
-- ⭐ Nội dung: `@api.constrains(...)` + `raise ValidationError` chặn Save khi: (1) `to_date <= from_date`; (2) 2 dòng OT trong **CÙNG đơn** (`request_id.line_ids`) trùng/đè khoảng giờ.
-- 🔀 **Ngã rẽ:** thuật toán overlap giữa các line — công thức `a.from < b.to and b.from < a.to`; nhớ **loại chính dòng đang xét** khỏi vòng so.
-- ⛔ Luật **"submit ≤ 2 ngày"** KHÔNG thuộc constrain C4 — nó ở `action_submit` (**C5**): bản nháp giữ ngày cũ, chỉ chặn lúc *gửi*.
-- Chi tiết ở [CODE_ALONG.md](CODE_ALONG.md) §C4 mục MS5.
-
-Sau MS5 → **nghiệm thu C4** rồi sang **C5** (sequence + workflow + mail).
+**C5 — Workflow + Mail.** ⚠️ **Chưa có scaffold.** Checklist ở [CODE_ALONG.md](CODE_ALONG.md) §C5:
+- `ir.sequence` (`data/ot_sequence.xml`) + **override `create()`** → thay `name` default `'New'` bằng `OT/2026/00001` (xem nợ kỹ thuật bên dưới); nhớ `copy=False`.
+- Form: statusbar + **5 button** workflow (Submit / PM Approve / PM Reject / DL Approve / DL Reject / Reset).
+- Methods `action_*`: đổi state + đóng dấu thời gian (`submitted_at`/`pm_action_at`/`dl_action_at` — 3 field này ĐANG có sẵn, C5 mới dùng) + gửi mail.
+- ⭐ **Luật "submit ≤ 2 ngày"** đặt ở `action_submit` (KHÔNG phải constrain) — bản nháp giữ ngày cũ, chỉ chặn lúc *gửi*.
+- 4 `mail.template` (`data/mail_templates.xml`) + helper `get_record_url()`; gửi mail KHÔNG log chatter.
+- 🔀 Ngã rẽ chốt đầu C5: chuỗi state hiện là `draft → to_approve_pm → to_approve_dl → approved / reject` — map 5 button vào đúng các bước này.
 
 > 🩺 **Lưu ý IDE:** language server hay báo nhầm "Could not find model 'hr.employee'" / "field 'department_id'" — **false positive** (chưa index module `hr`). Đã xác minh tận source Odoo 12: `project.py:193` `user_id`(PM), `hr.py:191` `parent_id`(Manager), `hr.py:190` `department_id`. Đừng đổi code theo cảnh báo này.
 

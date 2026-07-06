@@ -30,7 +30,7 @@
 | 1. Skeleton & Manifest | ✅ | — | manifest chuẩn (depends/version/data) |
 | 2. Models (3 model) | ✅ | — | field cơ bản; compute/tracking để dành C4/C6 |
 | 3. Views / Menu / Action | ✅ | 2026-06-29 | theo reference: gộp view 1 file, line tree inline; nghiệm thu pass |
-| 4. Compute / Onchange / Constrains | 🔶 | | **CHẬM LẠI** — thử lửa #1 · MS1 ✅ · MS2 ✅ · MS3 ✅ · MS4 ✅ · đang **MS5** |
+| 4. Compute / Onchange / Constrains | ✅ | 2026-07-06 | thử lửa #1 XONG · MS1–MS5 ✅ (compute store ×4 + constrains ×2) · nghiệm thu pass |
 | 5. Workflow + Mail | ⬜ | | |
 | 6. Wizard + Tracking | ⬜ | | |
 | 7. Security & Record Rules | ⬜ | | cần Phụ lục A trước khi test |
@@ -39,7 +39,7 @@
 | 10. Migration + Acceptance | ⬜ | | |
 | 11. Automated Testing | ⬜ | | |
 
-**👉 Đang ở:** 🔶 **C4**, MS1 ✅ + MS2 ✅ + MS3 ✅ + MS4 ✅ (compute store — nghiệm thu pass), đang **MS5** (constrains: `to_date > from_date` + chống trùng/đè giờ).
+**👉 Đang ở:** ✅ **C4 HOÀN TẤT** (MS1–MS5 pass), sẵn sàng sang 🟢 **C5 — Workflow + Mail** (sequence + override create + 5 button state + 4 mail.template).
 
 ---
 
@@ -245,7 +245,7 @@
   - [x] Thân `_compute_total_actual_hours` (`sum(rec.line_ids.mapped('actual_ot_hours'))`)
   - [x] Đưa `total_actual_hours` lên form (cột phải, `readonly="1"`)
 - [x] **MS4** ✅ — line `ot_registration_hours` = compute store số giờ (`(to_date-from_date).total_seconds()/3600`); **duration thuần → KHÔNG cần tz** (bẫy tz là của C8); `actual_ot_hours` giữ nhập tay ⭐ *(category để C8)*
-- [ ] **MS5** — constrains `to_date > from_date` + chống trùng/đè giờ trong cùng đơn ⭐
+- [x] **MS5** ✅ — 2 `@api.constrains` trên line: `_check_date_order` (`to_date > from_date`) + `_check_no_overlap` (chống đè giờ trong CÙNG đơn, formula `<`/`<`) ⭐ → **C4 HOÀN TẤT**
 - [ ] Micro-test sớm (tùy chọn): `tests/test_compute.py`
 
 > **2 ngã rẽ chốt sau:** (1) MS4 onchange (reference) vs compute store (Roadmap). (2) Luật "submit ≤ 2 ngày" thuộc `action_submit` (**C5**), KHÔNG phải constrain C4 — bản nháp được giữ ngày cũ, chỉ chặn lúc *gửi*.
@@ -289,9 +289,14 @@
 > 🐞 Bài học pair (3 lỗi review): (1) gọi `timedelta.total_seconds(x)` → `timedelta` chưa import + nhánh else truyền float vào → `NameError/TypeError`. Sửa: gọi method thẳng trên object hiệu `(...).total_seconds()`, KHÔNG cần import class. (2) đặt phép đổi NGOÀI `if` → nhánh else vỡ; phải đưa conversion vào trong `if`, else gán thẳng `0.0`. (3) `total_seconds()` ra **GIÂY** → thiếu `/3600`. Rút ra: hiệu 2 Datetime cho sẵn timedelta, cứ `.total_seconds()/3600`.
 > 🧠 Chốt Q&A: (a) duration bất biến với tz (hiệu 2 mốc UTC = hiệu 2 mốc local) → MS4 **không** localize; C8 mới cần vì lấy `.hour/.weekday()`. (b) `@api.depends('from_date','to_date')` đủ (field nguồn nằm ngay trên record, khác MS3 phải đi qua o2m). (c) guard rỗng che ca form đang gõ dở (NewId), dù field `required+default=now`. (d) **negative hours KHÔNG xử ở compute** — để **MS5 constrain** `raise ValidationError` gác cổng (compute tính thật, constrain chặn Save).
 
-### 🟢 MS5 *(chưa pair tới — điền khi đến)*
+### ✅ MS5 — constrains (gác cổng) — *XONG, nghiệm thu pass → ĐÓNG C4*
 **Mục tiêu:** `@api.constrains` chặn Save khi (1) `to_date <= from_date`; (2) 2 dòng OT trong **cùng đơn** trùng/đè khoảng giờ. `raise ValidationError`.
-**🔀 Ngã rẽ chốt sau:** so sánh khoảng giờ trên toàn `request_id.line_ids` (loại chính dòng đang xét) — thuật toán overlap `a.from < b.to and b.from < a.to`.
+**🔀 Thiết kế đã chốt:** **tách 2 method** (`_check_date_order` + `_check_no_overlap`), mỗi luật một hàm → thông báo lỗi rõ, một-hàm-một-việc. Cả hai `@api.constrains('from_date','to_date')`.
+**Scaffold (mentor):** thêm `from odoo.exceptions import ValidationError` + 2 method skeleton (guard + hint overlap, thân `pass`).
+**⭐ Đã làm (học viên):** L1 guard 2 mốc → `if rec.to_date <= rec.from_date: raise`. L2 duyệt `rec.request_id.line_ids`, loại self, overlap `line.from_date < rec.to_date and rec.from_date < line.to_date` → raise. Nghiệm thu pass 3 ca (to<from chặn / đè chặn / nối đuôi qua).
+> 🐞 Bài học pair: (1) `if to_date <= from_date` quên `rec.` → **NameError** (biến không có trong scope; compute/constrain luôn đi qua `rec`). (2) `pass` thừa sau block đã có lệnh → dọn. (3) `else: raise "hãy nhập..."` được nhưng thừa vì `required=True` đã chặn rỗng.
+> 🧠 Chốt Q&A: (a) `ValidationError` = sai **dữ liệu/ràng buộc**; `UserError` = **hành động** không được phép. (b) overlap dùng `<` (không `<=`) để chạm biên 21:00–21:00 KHÔNG tính đè → OT nối đuôi hợp lệ. (c) **ĐÍNH CHÍNH quan trọng:** `@api.constrains` chạy **SAU khi ghi DB** → record đều có **id thật** → `line.id != rec.id` KHÔNG lỗi ở đây; **NewId (id ảo) là chuyện của `@api.onchange`**, không phải constrain. (`line != rec` gọn hơn nhưng chỉ là style.) (d) chỉ chống đè **trong cùng đơn**; nhiều người khác đơn trùng giờ là bình thường → không chặn cross-đơn.
+> 📐 Ghi chú: công thức overlap **đối xứng** → dù constrain kích hoạt trên dòng mới hay dòng bị sửa cho đè, đều bắt được, không sót chiều.
 
 </details>
 
@@ -357,6 +362,7 @@
 
 | Ngày | Chương/MS | Nội dung |
 |---|---|---|
+| 2026-07-06 | C4 | ✅ **ĐÓNG C4 (MS5 + nghiệm thu).** Mentor dựng scaffold 2 `@api.constrains` + import `ValidationError`. Học viên viết `_check_date_order` (`rec.to_date <= rec.from_date`) + `_check_no_overlap` (duyệt `request_id.line_ids`, loại self, overlap `<`/`<`). Review bắt: quên `rec.` → NameError, `pass` thừa. Đính chính (c): constrain chạy sau ghi DB nên id thật → `.id` không lỗi; NewId là của onchange. Nghiệm thu pass 3 ca. **C4 hoàn tất → sang C5 (workflow+mail).** |
 | 2026-07-06 | C4·MS4 | ✅ **ĐÓNG MS4.** Chốt ngã rẽ #1 = **compute store** (không onchange). Mentor dựng scaffold (`ot_registration_hours` compute store + `@api.depends('from_date','to_date')`). Học viên viết `(to_date-from_date).total_seconds()/3600.0` + guard. Review bắt 3 lỗi: `timedelta` chưa import, phép đổi ngoài `if` làm else vỡ, thiếu `/3600` (giây≠giờ). Chốt: **duration KHÔNG cần tz** (bẫy tz để C8); negative hours để **MS5 constrain**, không xử ở compute. `actual_ot_hours` giữ nhập tay. Nghiệm thu `19:00→21:30 = 2.50` pass. Sang **MS5** (constrains). |
 | 2026-07-06 | C4·MS3 | ✅ **ĐÓNG MS3.** Mentor dựng scaffold (`total_actual_hours` Float compute store + `@api.depends('line_ids.actual_ot_hours')` + placeholder — trước đó CHƯA có). Học viên viết thân `sum(rec.line_ids.mapped('actual_ot_hours'))` + đưa lên form (readonly). Nghiệm thu pass 3 ca. Bài học: nhánh `if/else 0` THỪA (`sum([])==0`); ca thêm/xóa dòng pass → depends `line_ids.actual_ot_hours` ĐÃ ĐỦ. Sang **MS4** (giờ OT theo khoảng — timezone). |
 | 2026-07-06 | C4·MS2 | ✅ **ĐÓNG MS2.** Học viên viết thân `_compute_employee_custom_name` (ghép `"tên <dept>"`, bẫy phòng ban rỗng → `<Chưa có phòng ban>`, else `= False`) + đưa field lên form (cột phải, readonly). Nghiệm thu pass 3 ca. Review bắt 3 lỗi: else thiếu init biến, hardcode tên giả, format thiếu `< >`. Sang **MS3** (`total_actual_hours` — CHƯA có scaffold). |

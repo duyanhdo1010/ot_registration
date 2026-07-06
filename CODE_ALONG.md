@@ -30,7 +30,7 @@
 | 1. Skeleton & Manifest | ✅ | — | manifest chuẩn (depends/version/data) |
 | 2. Models (3 model) | ✅ | — | field cơ bản; compute/tracking để dành C4/C6 |
 | 3. Views / Menu / Action | ✅ | 2026-06-29 | theo reference: gộp view 1 file, line tree inline; nghiệm thu pass |
-| 4. Compute / Onchange / Constrains | 🔶 | | **CHẬM LẠI** — thử lửa #1 · MS1 ✅ · đang **MS2** |
+| 4. Compute / Onchange / Constrains | 🔶 | | **CHẬM LẠI** — thử lửa #1 · MS1 ✅ · MS2 ✅ · MS3 ✅ · đang **MS4** |
 | 5. Workflow + Mail | ⬜ | | |
 | 6. Wizard + Tracking | ⬜ | | |
 | 7. Security & Record Rules | ⬜ | | cần Phụ lục A trước khi test |
@@ -39,7 +39,7 @@
 | 10. Migration + Acceptance | ⬜ | | |
 | 11. Automated Testing | ⬜ | | |
 
-**👉 Đang ở:** 🔶 **C4**, MS1 ✅ (pm_id/dl_id compute store — nghiệm thu pass), đang **MS2** (`employee_custom_name` = `Tên <Phòng ban>`).
+**👉 Đang ở:** 🔶 **C4**, MS1 ✅ + MS2 ✅ + MS3 ✅ (compute store — nghiệm thu pass), đang **MS4** (giờ OT theo khoảng — bắt đầu đụng timezone).
 
 ---
 
@@ -238,9 +238,13 @@
   - [x] `_compute_pm_id` (search hr.employee theo `project_id.user_id.id`, có guard rỗng + `.sudo()`)
   - [x] `_compute_dl_id` (`employee_id.parent_id`)
   - [x] Đưa `pm_id`/`dl_id` lên form (`readonly` + `no_open`)
-- [~] **MS2** — `employee_custom_name` compute store = `Tên <Phòng ban>` ⭐ *(scaffold sẵn trong `ot_request.py` — điền thân + lên form ở session sau)*
-- [ ] **MS3** — `total_actual_hours` compute store = Σ `line_ids.actual_ot_hours` ⭐
-- [ ] **MS4** — line: `ot_registration_hours`/`actual_ot_hours` theo khoảng giờ (onchange + localize tz) ⭐ *(category để C8)*
+- [x] **MS2** ✅ — `employee_custom_name` compute store = `Tên <Phòng ban>` (nghiệm thu pass 3 ca: có phòng ban / chưa có phòng ban → `<Chưa có phòng ban>` / form trống → `False`)
+  - [x] Thân `_compute_employee_custom_name` (ghép `"tên <dept>"`, bẫy phòng ban rỗng, nhánh else `= False`)
+  - [x] Đưa `employee_custom_name` lên form (cột phải, `readonly="1"`)
+- [x] **MS3** ✅ — `total_actual_hours` compute store = Σ `line_ids.actual_ot_hours` (nghiệm thu pass 3 ca: tổng đúng / sửa giờ tự đổi / thêm-xóa dòng tự cập nhật)
+  - [x] Thân `_compute_total_actual_hours` (`sum(rec.line_ids.mapped('actual_ot_hours'))`)
+  - [x] Đưa `total_actual_hours` lên form (cột phải, `readonly="1"`)
+- [~] **MS4** — line: `ot_registration_hours`/`actual_ot_hours` theo khoảng giờ (onchange + localize tz) ⭐ *(category để C8)*
 - [ ] **MS5** — constrains `to_date > from_date` + chống trùng/đè giờ trong cùng đơn ⭐
 - [ ] Micro-test sớm (tùy chọn): `tests/test_compute.py`
 
@@ -263,13 +267,20 @@
 - Đưa `pm_id` (cột trái, `readonly="1" options="{'no_open':True}"`) + `dl_id` (cột phải) lên form — uncomment chỗ `🔜 C4`.
 **Review hỏi:** (a) bỏ `store=True` thì C7 lọc theo pm_id hỏng ở đâu? (b) vì sao cần `.sudo()` trong compute? (c) `_compute_dl_id` nên `@api.depends('employee_id')` hay thêm `'employee_id.parent_id'`? khác nhau khi nào? (d) `ondelete='restrict'` trên field compute store nghĩa là gì khi xóa nhân viên?
 
-### 🟡 MS2 — employee_custom_name (compute store) — *đang làm*
+### ✅ MS2 — employee_custom_name (compute store) — *XONG, nghiệm thu pass*
 **Mục tiêu:** field Char hiển thị `Tên <Phòng ban>` (vd `Mitchell Admin <Management>`). Nguồn: `employee_id.name` + `employee_id.department_id.name`.
 **Quyết định thiết kế (⭐ cần hiểu):** *live* (compute store + depends → tự đổi khi NV đổi phòng) vs *snapshot* (đóng băng lúc tạo, set trong `create()`). Reference dùng **live**; thực tế payroll nhiều khi muốn snapshot. Bám reference = live.
 **Scaffold:** field `employee_custom_name = Char(compute='_compute_employee_custom_name', store=True)` + method có `@api.depends('employee_id','employee_id.department_id')` + placeholder.
-**⭐ Your Turn:** ghép chuỗi `f"{name} <{dept}>"`; xử lý NV chưa có phòng ban; nhánh `else` khi chưa có employee. Đưa field lên form (cột phải, readonly).
+**⭐ Đã làm:** ghép chuỗi `"tên <dept>"`; bẫy NV chưa có phòng ban → `<Chưa có phòng ban>`; nhánh `else` (chưa có employee) → `= False`; đưa field lên form (cột phải, readonly).
+> 🐞 Bài học pair khi review thân method: (1) thiếu nhánh `else` khởi tạo `full_name` → biến rò rỉ qua vòng lặp / `NameError` khi record trống — compute store chạy cho **mọi** record kể cả chưa chọn NV. (2) đừng hardcode dữ liệu giả (`"Nguyen Van A"`) ở nhánh trống → dùng `False`. (3) guard nên hỏi `if rec.employee_id:` (đã chọn NV chưa) thay vì `.name`.
 
-### 🟢 MS3–MS5 *(chưa pair tới — điền khi đến)*
+### ✅ MS3 — total_actual_hours (compute store, aggregate) — *XONG, nghiệm thu pass*
+**Mục tiêu:** field Float = tổng `actual_ot_hours` của mọi dòng `line_ids`. Mẫu *aggregate over one2many* (tổng tiền/tổng giờ).
+**Scaffold (mentor thêm Ở session này — trước đó CHƯA có, khác MS1/MS2):** field `total_actual_hours = Float(compute='_compute_total_actual_hours', store=True)` + method `@api.depends('line_ids.actual_ot_hours')` + placeholder `= 0`.
+**⭐ Đã làm:** `rec.total_actual_hours = sum(rec.line_ids.mapped('actual_ot_hours'))` + đưa field lên form (cột phải, readonly).
+> 🐞 Bài học pair: (1) học viên tự thêm nhánh `if line_ids / else 0` (thói quen tốt từ MS2) — ĐÚNG nhưng THỪA, vì `sum([]) == 0` đã lo ca rỗng. Rút ra: có cần `else` hay không tùy **hàm đã tự xử ca rỗng chưa**, không máy móc thêm mọi lúc (đối chiếu MS2: else ở đó BẮT BUỘC vì biến chưa khởi tạo). (2) Câu hỏi depends — nghiệm thu ca **thêm/xóa dòng PASS** → `@api.depends('line_ids.actual_ot_hours')` **ĐÃ ĐỦ** (đường dẫn qua o2m tự bắt add/remove line), KHÔNG cần thêm `'line_ids'` riêng.
+
+### 🟢 MS4–MS5 *(chưa pair tới — điền khi đến)*
 
 </details>
 
@@ -335,6 +346,8 @@
 
 | Ngày | Chương/MS | Nội dung |
 |---|---|---|
+| 2026-07-06 | C4·MS3 | ✅ **ĐÓNG MS3.** Mentor dựng scaffold (`total_actual_hours` Float compute store + `@api.depends('line_ids.actual_ot_hours')` + placeholder — trước đó CHƯA có). Học viên viết thân `sum(rec.line_ids.mapped('actual_ot_hours'))` + đưa lên form (readonly). Nghiệm thu pass 3 ca. Bài học: nhánh `if/else 0` THỪA (`sum([])==0`); ca thêm/xóa dòng pass → depends `line_ids.actual_ot_hours` ĐÃ ĐỦ. Sang **MS4** (giờ OT theo khoảng — timezone). |
+| 2026-07-06 | C4·MS2 | ✅ **ĐÓNG MS2.** Học viên viết thân `_compute_employee_custom_name` (ghép `"tên <dept>"`, bẫy phòng ban rỗng → `<Chưa có phòng ban>`, else `= False`) + đưa field lên form (cột phải, readonly). Nghiệm thu pass 3 ca. Review bắt 3 lỗi: else thiếu init biến, hardcode tên giả, format thiếu `< >`. Sang **MS3** (`total_actual_hours` — CHƯA có scaffold). |
 | 2026-06-29 | C4·MS2 | ▶️ Mở **MS2** (`employee_custom_name` = `Tên <Phòng ban>`). |
 | 2026-06-29 | C4·MS1 | ✅ **MS1 pass.** Học viên điền `_compute_pm_id` (guard rỗng + `.id` + `.sudo()`) + `_compute_dl_id` (`employee_id.parent_id`) + đưa field lên form. Bug "field trống" = bản ghi cũ stale (compute store không backfill cột cũ), KHÔNG sửa code. Field name Odoo 12 đã xác minh. |
 | 2026-06-29 | C3 | ✅ **ĐÓNG C3** — MS4 action+menu + nghiệm thu pass. Blocker "cache" = 3 server odoo song song (đã kill). Sang C4. |

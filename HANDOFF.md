@@ -5,12 +5,12 @@
 
 ---
 
-## 📸 Snapshot (cập nhật: 2026-06-29)
+## 📸 Snapshot (cập nhật: 2026-07-06)
 
 - **Project:** module Odoo 12 `ot.registration` — quản lý đăng ký OT. Spec: [README.md](README.md). Giáo trình: [Roadmap.md](Roadmap.md).
 - **Chế độ làm việc:** CODE-ALONG (mentor đưa concept + skeleton, học viên hoàn thiện logic; mentor KHÔNG code thay phần nghiệp vụ). Luật + tiến độ đầy đủ ở [CODE_ALONG.md](CODE_ALONG.md).
 - **Convention đã chốt:** **theo BẢN THAM KHẢO** `ot_registration/ot_registration/` (state `to_approve_pm/to_approve_dl/reject`, line `from_date/to_date`, gộp view 1 file + line tree inline). Bảng đối chiếu: mục "🎯 Bản tham khảo" trong CODE_ALONG.
-- **Đang ở:** 🔶 **C4 — Compute/Onchange/Constrains** (thử lửa #1, đạp phanh). **MS1 ✅** (pm_id/dl_id compute store — pass). Đang **MS2**: `employee_custom_name` = `Tên <Phòng ban>` (compute store). Plan MS1→MS5 ở [CODE_ALONG.md](CODE_ALONG.md) §C4.
+- **Đang ở:** 🔶 **C4 — Compute/Onchange/Constrains** (thử lửa #1, đạp phanh). **MS1 ✅ + MS2 ✅ + MS3 ✅** (pm_id/dl_id + employee_custom_name + total_actual_hours, compute store — nghiệm thu pass). Đang **MS4**: giờ OT theo khoảng + localize tz (bắt đầu đụng timezone — đạp phanh #2). Plan MS1→MS5 ở [CODE_ALONG.md](CODE_ALONG.md) §C4.
 
 ---
 
@@ -43,17 +43,17 @@ Get-NetTCPConnection -LocalPort 8069 -State Listen | Select OwningProcess
 
 ---
 
-## ⏭️ VIỆC TIẾP THEO — C4 / MS2 (bắt đầu session sau)
+## ⏭️ VIỆC TIẾP THEO — C4 / MS4 (bắt đầu session sau)
 
-**MS1 ✅ ĐÓNG:** `pm_id`/`dl_id` → `hr.employee` **compute store** (`_compute_pm_id` search theo `project_id.user_id.id` có guard + `.sudo()`; `_compute_dl_id = employee_id.parent_id`), đã lên form, nghiệm thu pass (bản ghi mới tự điền PM+DL).
+**MS1 ✅ ĐÓNG:** `pm_id`/`dl_id` → `hr.employee` compute store. **MS2 ✅ ĐÓNG:** `employee_custom_name` = `Tên <Phòng ban>` compute store (Live). **MS3 ✅ ĐÓNG:** `total_actual_hours` = `sum(line_ids.mapped('actual_ot_hours'))` compute store — đã kiểm `@api.depends('line_ids.actual_ot_hours')` ĐỦ bắt add/xóa line (KHÔNG cần thêm `'line_ids'`). Cả 3 đã lên form (readonly), nghiệm thu pass.
 
-**MS2 — `employee_custom_name` = `Tên <Phòng ban>` (compute store).** ⚠️ **Scaffold ĐÃ nằm sẵn** trong `models/ot_request.py` (field + method `_compute_employee_custom_name` có `@api.depends('employee_id','employee_id.department_id')` + placeholder `= False` no-op). Việc học viên session sau:
-- ⭐ Điền thân: ghép f-string `f"{tên} <{phòng ban}>"`; bẫy NV chưa có phòng ban → thay `'Chưa có phòng ban'`; nhánh `else` khi chưa có employee.
-- ⭐ Đưa `employee_custom_name` lên form (cột phải, `readonly`) — chỗ comment `🔜 C4`.
-- Test bằng **bản ghi MỚI** (bản cũ bị stale — xem bài học MS1).
-- Đã chốt **Live** (compute + depends), không snapshot.
+**MS4 — tính giờ OT theo KHOẢNG (`from_date`→`to_date`) trên `ot.request.line`.** ⚠️ Đây là **"đạp phanh #2" — bẫy TIMEZONE**, đi CHẬM. **Chưa có scaffold.**
+- 🔀 **QUYẾT ĐỊNH TRƯỚC KHI CODE (ngã rẽ #1):** dùng **onchange** (theo reference) hay **compute store** (theo Roadmap) để điền `ot_registration_hours`/`actual_ot_hours`? Chốt với học viên rồi MỚI dựng skeleton. Nhắc: onchange KHÔNG chạy khi tạo bằng code; compute store chạy mọi lúc (xem "Mô hình tư duy" §C4).
+- ⭐ Nội dung: `from_date`/`to_date` lưu **UTC** → **localize về tz người dùng** → suy ra số giờ OT. Bẫy kinh điển: quên localize → lệch giờ.
+- ⛔ **KHÔNG làm category** ở MS4 — phân loại OT theo mốc thời gian (ngày/đêm/lễ) để dành **C8**. MS4 chỉ tính số giờ.
+- Tham chiếu khi pair: bản reference `ot_registration/ot_registration/` (cách nó tính giờ) + Roadmap (lý thuyết tz). Chi tiết mentor sẽ điền vào [CODE_ALONG.md](CODE_ALONG.md) §C4 lúc bắt đầu.
 
-**Còn lại C4:** MS3 `total_actual_hours` (Σ `line_ids.actual_ot_hours`) · MS4 giờ OT theo khoảng (onchange + localize tz) · MS5 constrains (`to_date > from_date` + chống trùng/đè giờ). Chi tiết + 2 ngã rẽ ở [CODE_ALONG.md](CODE_ALONG.md) §C4.
+**Còn lại C4:** MS5 constrains (`to_date > from_date` + chống trùng/đè giờ trong cùng đơn). Chi tiết + 2 ngã rẽ ở [CODE_ALONG.md](CODE_ALONG.md) §C4.
 
 > 🩺 **Lưu ý IDE:** language server hay báo nhầm "Could not find model 'hr.employee'" / "field 'department_id'" — **false positive** (chưa index module `hr`). Đã xác minh tận source Odoo 12: `project.py:193` `user_id`(PM), `hr.py:191` `parent_id`(Manager), `hr.py:190` `department_id`. Đừng đổi code theo cảnh báo này.
 
@@ -70,7 +70,7 @@ Get-NetTCPConnection -LocalPort 8069 -State Listen | Select OwningProcess
 ## ⚠️ NỢ KỸ THUẬT / GHI CHÚ (đừng quên ở chương sau)
 
 - `name` đang `default='New'` tạm → **C5** thay bằng `ir.sequence` (`OT/2026/00001`) trong `create()`.
-- `pm_id`/`dl_id` đang `res.users` → **C4** đổi sang `hr.employee` + compute (theo reference: `dl_id=employee.parent_id`, `pm_id` từ `project.user_id`).
+- ~~`pm_id`/`dl_id` đang `res.users` → C4 đổi sang `hr.employee` + compute~~ ✅ **XONG ở MS1** (`dl_id=employee.parent_id`, `pm_id` từ `project.user_id`).
 - 3 field `submitted_at/pm_action_at/dl_action_at` (kiểu Roadmap) reference không dùng — để đó, đừng đưa lên form.
 - `ot_category_views.xml` còn là vỏ rỗng trong manifest — cân nhắc gỡ (MS5 đã bỏ).
 - Bug trong reference (đừng chép mù): `ot_request_line.py:74` so recordset==id; `:150` external id sai chính tả `cacot_cat_unknown`.

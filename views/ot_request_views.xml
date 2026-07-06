@@ -67,7 +67,8 @@
               <field name="employee_id"/>
               <field name="request_date"/>
               <field name="dl_id" readonly="1" options="{'no_open':True}"/>
-              <!-- 🔜 C4: employee_custom_name, total_actual_hours -->
+              <field name="employee_custom_name" readonly="1"/>
+              <field name="total_actual_hours" readonly="1"/>
               <!-- 🔜 C5: deadline_date, late_approved (+ alert div) -->
             </group>
           </group>

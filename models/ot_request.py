@@ -31,6 +31,9 @@ class OtRequest(models.Model):
     pm_action_at = fields.Datetime(string='PM Action At', readonly=True)
     dl_action_at = fields.Datetime(string='DL Action At', readonly=True)
     line_ids = fields.One2many('ot.request.line', 'request_id', string='OT Lines')
+    total_actual_hours = fields.Float(
+        string='Total Actual OT Hours',
+        compute='_compute_total_actual_hours', store=True)
 
     # Gán pm và dl khi tạo
     @api.depends('project_id')
@@ -55,11 +58,20 @@ class OtRequest(models.Model):
     @api.depends('employee_id', 'employee_id.department_id')
     def _compute_employee_custom_name(self):
         for rec in self:
-            # ⭐ Your Turn (MS2):
-            #   Ghép chuỗi dạng:  "Tên nhân viên <Tên phòng ban>"
-            #   - tên NV:        rec.employee_id.name
-            #   - tên phòng ban: rec.employee_id.department_id.name
-            #   Bẫy: NV chưa có phòng ban → department_id rỗng → .name sẽ là gì?
-            #        → cần giá trị thay thế (vd 'Chưa có phòng ban').
-            #   Nhánh else: khi rec.employee_id rỗng thì gán gì?
-            rec.employee_custom_name = False  # ← placeholder, THAY bằng logic của bạn
+            if rec.employee_id.name:
+                full_name = rec.employee_id.name
+                if rec.employee_id.department_id.name:
+                    full_name += " <" + rec.employee_id.department_id.name + ">"
+                else:
+                    full_name += " <Chưa có phòng ban>"
+            else:
+                full_name = False
+            rec.employee_custom_name = full_name
+
+    # ============================================================
+    # C4 · MS3 — total_actual_hours = Σ line_ids.actual_ot_hours
+    # ============================================================
+    @api.depends('line_ids.actual_ot_hours')
+    def _compute_total_actual_hours(self):
+        for rec in self:
+            rec.total_actual_hours = sum(rec.line_ids.mapped('actual_ot_hours'))

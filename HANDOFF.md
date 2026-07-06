@@ -10,7 +10,8 @@
 - **Project:** module Odoo 12 `ot.registration` — quản lý đăng ký OT. Spec: [README.md](README.md). Giáo trình: [Roadmap.md](Roadmap.md).
 - **Chế độ làm việc:** CODE-ALONG (mentor đưa concept + skeleton, học viên hoàn thiện logic; mentor KHÔNG code thay phần nghiệp vụ). Luật + tiến độ đầy đủ ở [CODE_ALONG.md](CODE_ALONG.md).
 - **Convention đã chốt:** **theo BẢN THAM KHẢO** `ot_registration/ot_registration/` (state `to_approve_pm/to_approve_dl/reject`, line `from_date/to_date`, gộp view 1 file + line tree inline). Bảng đối chiếu: mục "🎯 Bản tham khảo" trong CODE_ALONG.
-- **Đang ở:** 🔶 **C4 — Compute/Onchange/Constrains** (thử lửa #1, đạp phanh). **MS1 ✅ + MS2 ✅ + MS3 ✅** (pm_id/dl_id + employee_custom_name + total_actual_hours, compute store — nghiệm thu pass). Đang **MS4**: giờ OT theo khoảng + localize tz (bắt đầu đụng timezone — đạp phanh #2). Plan MS1→MS5 ở [CODE_ALONG.md](CODE_ALONG.md) §C4.
+- **Đang ở:** 🔶 **C4 — Compute/Onchange/Constrains** (thử lửa #1, đạp phanh). **MS1 ✅ + MS2 ✅ + MS3 ✅ + MS4 ✅** (pm_id/dl_id + employee_custom_name + total_actual_hours + ot_registration_hours, compute store — nghiệm thu pass). Đang **MS5**: constrains `to_date > from_date` + chống trùng/đè giờ. Plan MS1→MS5 ở [CODE_ALONG.md](CODE_ALONG.md) §C4.
+- **📌 Bài học chốt MS4 (đừng quên ở C8):** tính **duration** (số giờ giữa 2 mốc) **KHÔNG cần timezone** — hiệu 2 mốc UTC = hiệu 2 mốc local. Bẫy tz THẬT nằm ở **C8** khi lấy `.hour/.weekday()` để phân loại category. MS4 đã bỏ hẳn pytz.
 
 ---
 
@@ -43,17 +44,17 @@ Get-NetTCPConnection -LocalPort 8069 -State Listen | Select OwningProcess
 
 ---
 
-## ⏭️ VIỆC TIẾP THEO — C4 / MS4 (bắt đầu session sau)
+## ⏭️ VIỆC TIẾP THEO — C4 / MS5 (bắt đầu session sau)
 
-**MS1 ✅ ĐÓNG:** `pm_id`/`dl_id` → `hr.employee` compute store. **MS2 ✅ ĐÓNG:** `employee_custom_name` = `Tên <Phòng ban>` compute store (Live). **MS3 ✅ ĐÓNG:** `total_actual_hours` = `sum(line_ids.mapped('actual_ot_hours'))` compute store — đã kiểm `@api.depends('line_ids.actual_ot_hours')` ĐỦ bắt add/xóa line (KHÔNG cần thêm `'line_ids'`). Cả 3 đã lên form (readonly), nghiệm thu pass.
+**MS1 ✅** `pm_id`/`dl_id` → `hr.employee` compute store. **MS2 ✅** `employee_custom_name` = `Tên <Phòng ban>` compute store (Live). **MS3 ✅** `total_actual_hours` = `sum(line_ids.mapped('actual_ot_hours'))` compute store. **MS4 ✅** `ot_registration_hours` = `(to_date-from_date).total_seconds()/3600.0` compute store (`@api.depends('from_date','to_date')`, guard rỗng, **không import timedelta / không pytz** — duration bất biến với tz); `actual_ot_hours` giữ nhập tay. Nghiệm thu `19:00→21:30 = 2.50` pass.
 
-**MS4 — tính giờ OT theo KHOẢNG (`from_date`→`to_date`) trên `ot.request.line`.** ⚠️ Đây là **"đạp phanh #2" — bẫy TIMEZONE**, đi CHẬM. **Chưa có scaffold.**
-- 🔀 **QUYẾT ĐỊNH TRƯỚC KHI CODE (ngã rẽ #1):** dùng **onchange** (theo reference) hay **compute store** (theo Roadmap) để điền `ot_registration_hours`/`actual_ot_hours`? Chốt với học viên rồi MỚI dựng skeleton. Nhắc: onchange KHÔNG chạy khi tạo bằng code; compute store chạy mọi lúc (xem "Mô hình tư duy" §C4).
-- ⭐ Nội dung: `from_date`/`to_date` lưu **UTC** → **localize về tz người dùng** → suy ra số giờ OT. Bẫy kinh điển: quên localize → lệch giờ.
-- ⛔ **KHÔNG làm category** ở MS4 — phân loại OT theo mốc thời gian (ngày/đêm/lễ) để dành **C8**. MS4 chỉ tính số giờ.
-- Tham chiếu khi pair: bản reference `ot_registration/ot_registration/` (cách nó tính giờ) + Roadmap (lý thuyết tz). Chi tiết mentor sẽ điền vào [CODE_ALONG.md](CODE_ALONG.md) §C4 lúc bắt đầu.
+**MS5 — constrains trên `ot.request.line`.** ⚠️ **Chưa có scaffold.**
+- ⭐ Nội dung: `@api.constrains(...)` + `raise ValidationError` chặn Save khi: (1) `to_date <= from_date`; (2) 2 dòng OT trong **CÙNG đơn** (`request_id.line_ids`) trùng/đè khoảng giờ.
+- 🔀 **Ngã rẽ:** thuật toán overlap giữa các line — công thức `a.from < b.to and b.from < a.to`; nhớ **loại chính dòng đang xét** khỏi vòng so.
+- ⛔ Luật **"submit ≤ 2 ngày"** KHÔNG thuộc constrain C4 — nó ở `action_submit` (**C5**): bản nháp giữ ngày cũ, chỉ chặn lúc *gửi*.
+- Chi tiết ở [CODE_ALONG.md](CODE_ALONG.md) §C4 mục MS5.
 
-**Còn lại C4:** MS5 constrains (`to_date > from_date` + chống trùng/đè giờ trong cùng đơn). Chi tiết + 2 ngã rẽ ở [CODE_ALONG.md](CODE_ALONG.md) §C4.
+Sau MS5 → **nghiệm thu C4** rồi sang **C5** (sequence + workflow + mail).
 
 > 🩺 **Lưu ý IDE:** language server hay báo nhầm "Could not find model 'hr.employee'" / "field 'department_id'" — **false positive** (chưa index module `hr`). Đã xác minh tận source Odoo 12: `project.py:193` `user_id`(PM), `hr.py:191` `parent_id`(Manager), `hr.py:190` `department_id`. Đừng đổi code theo cảnh báo này.
 

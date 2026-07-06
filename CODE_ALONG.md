@@ -30,7 +30,7 @@
 | 1. Skeleton & Manifest | ✅ | — | manifest chuẩn (depends/version/data) |
 | 2. Models (3 model) | ✅ | — | field cơ bản; compute/tracking để dành C4/C6 |
 | 3. Views / Menu / Action | ✅ | 2026-06-29 | theo reference: gộp view 1 file, line tree inline; nghiệm thu pass |
-| 4. Compute / Onchange / Constrains | 🔶 | | **CHẬM LẠI** — thử lửa #1 · MS1 ✅ · MS2 ✅ · MS3 ✅ · đang **MS4** |
+| 4. Compute / Onchange / Constrains | 🔶 | | **CHẬM LẠI** — thử lửa #1 · MS1 ✅ · MS2 ✅ · MS3 ✅ · MS4 ✅ · đang **MS5** |
 | 5. Workflow + Mail | ⬜ | | |
 | 6. Wizard + Tracking | ⬜ | | |
 | 7. Security & Record Rules | ⬜ | | cần Phụ lục A trước khi test |
@@ -39,7 +39,7 @@
 | 10. Migration + Acceptance | ⬜ | | |
 | 11. Automated Testing | ⬜ | | |
 
-**👉 Đang ở:** 🔶 **C4**, MS1 ✅ + MS2 ✅ + MS3 ✅ (compute store — nghiệm thu pass), đang **MS4** (giờ OT theo khoảng — bắt đầu đụng timezone).
+**👉 Đang ở:** 🔶 **C4**, MS1 ✅ + MS2 ✅ + MS3 ✅ + MS4 ✅ (compute store — nghiệm thu pass), đang **MS5** (constrains: `to_date > from_date` + chống trùng/đè giờ).
 
 ---
 
@@ -244,7 +244,7 @@
 - [x] **MS3** ✅ — `total_actual_hours` compute store = Σ `line_ids.actual_ot_hours` (nghiệm thu pass 3 ca: tổng đúng / sửa giờ tự đổi / thêm-xóa dòng tự cập nhật)
   - [x] Thân `_compute_total_actual_hours` (`sum(rec.line_ids.mapped('actual_ot_hours'))`)
   - [x] Đưa `total_actual_hours` lên form (cột phải, `readonly="1"`)
-- [~] **MS4** — line: `ot_registration_hours`/`actual_ot_hours` theo khoảng giờ (onchange + localize tz) ⭐ *(category để C8)*
+- [x] **MS4** ✅ — line `ot_registration_hours` = compute store số giờ (`(to_date-from_date).total_seconds()/3600`); **duration thuần → KHÔNG cần tz** (bẫy tz là của C8); `actual_ot_hours` giữ nhập tay ⭐ *(category để C8)*
 - [ ] **MS5** — constrains `to_date > from_date` + chống trùng/đè giờ trong cùng đơn ⭐
 - [ ] Micro-test sớm (tùy chọn): `tests/test_compute.py`
 
@@ -280,7 +280,18 @@
 **⭐ Đã làm:** `rec.total_actual_hours = sum(rec.line_ids.mapped('actual_ot_hours'))` + đưa field lên form (cột phải, readonly).
 > 🐞 Bài học pair: (1) học viên tự thêm nhánh `if line_ids / else 0` (thói quen tốt từ MS2) — ĐÚNG nhưng THỪA, vì `sum([]) == 0` đã lo ca rỗng. Rút ra: có cần `else` hay không tùy **hàm đã tự xử ca rỗng chưa**, không máy móc thêm mọi lúc (đối chiếu MS2: else ở đó BẮT BUỘC vì biến chưa khởi tạo). (2) Câu hỏi depends — nghiệm thu ca **thêm/xóa dòng PASS** → `@api.depends('line_ids.actual_ot_hours')` **ĐÃ ĐỦ** (đường dẫn qua o2m tự bắt add/remove line), KHÔNG cần thêm `'line_ids'` riêng.
 
-### 🟢 MS4–MS5 *(chưa pair tới — điền khi đến)*
+### ✅ MS4 — ot_registration_hours (compute store, duration) — *XONG, nghiệm thu pass*
+**Mục tiêu:** field Float trên `ot.request.line` = số giờ giữa `from_date`→`to_date` (thập phân, vd 19:00→21:30 = 2.5).
+**🔀 Ngã rẽ #1 đã chốt:** **compute store** (không phải onchange) — đồng bộ MS1–MS3 + để C9 "tạo ngẫu nhiên bằng code" ra số giờ đúng (onchange KHÔNG chạy khi tạo bằng code).
+**⭐ Quyết định ngữ nghĩa 2 field:** `ot_registration_hours` = giờ **đăng ký** (auto từ range, compute) vs `actual_ot_hours` = giờ **thực làm** (giữ **nhập tay** → chính là cái MS3 `total_actual_hours` cộng dồn). Không auto cả hai (sẽ luôn bằng nhau → thừa field).
+**Scaffold (mentor):** đổi `ot_registration_hours` sang `compute='_compute_ot_registration_hours', store=True` + `@api.depends('from_date','to_date')` + placeholder `= 0.0`.
+**⭐ Đã làm (học viên):** `delta = to_date - from_date` (timedelta, **không import** gì); `= delta.total_seconds() / 3600.0`; guard `if from_date and to_date … else 0.0`.
+> 🐞 Bài học pair (3 lỗi review): (1) gọi `timedelta.total_seconds(x)` → `timedelta` chưa import + nhánh else truyền float vào → `NameError/TypeError`. Sửa: gọi method thẳng trên object hiệu `(...).total_seconds()`, KHÔNG cần import class. (2) đặt phép đổi NGOÀI `if` → nhánh else vỡ; phải đưa conversion vào trong `if`, else gán thẳng `0.0`. (3) `total_seconds()` ra **GIÂY** → thiếu `/3600`. Rút ra: hiệu 2 Datetime cho sẵn timedelta, cứ `.total_seconds()/3600`.
+> 🧠 Chốt Q&A: (a) duration bất biến với tz (hiệu 2 mốc UTC = hiệu 2 mốc local) → MS4 **không** localize; C8 mới cần vì lấy `.hour/.weekday()`. (b) `@api.depends('from_date','to_date')` đủ (field nguồn nằm ngay trên record, khác MS3 phải đi qua o2m). (c) guard rỗng che ca form đang gõ dở (NewId), dù field `required+default=now`. (d) **negative hours KHÔNG xử ở compute** — để **MS5 constrain** `raise ValidationError` gác cổng (compute tính thật, constrain chặn Save).
+
+### 🟢 MS5 *(chưa pair tới — điền khi đến)*
+**Mục tiêu:** `@api.constrains` chặn Save khi (1) `to_date <= from_date`; (2) 2 dòng OT trong **cùng đơn** trùng/đè khoảng giờ. `raise ValidationError`.
+**🔀 Ngã rẽ chốt sau:** so sánh khoảng giờ trên toàn `request_id.line_ids` (loại chính dòng đang xét) — thuật toán overlap `a.from < b.to and b.from < a.to`.
 
 </details>
 
@@ -346,6 +357,7 @@
 
 | Ngày | Chương/MS | Nội dung |
 |---|---|---|
+| 2026-07-06 | C4·MS4 | ✅ **ĐÓNG MS4.** Chốt ngã rẽ #1 = **compute store** (không onchange). Mentor dựng scaffold (`ot_registration_hours` compute store + `@api.depends('from_date','to_date')`). Học viên viết `(to_date-from_date).total_seconds()/3600.0` + guard. Review bắt 3 lỗi: `timedelta` chưa import, phép đổi ngoài `if` làm else vỡ, thiếu `/3600` (giây≠giờ). Chốt: **duration KHÔNG cần tz** (bẫy tz để C8); negative hours để **MS5 constrain**, không xử ở compute. `actual_ot_hours` giữ nhập tay. Nghiệm thu `19:00→21:30 = 2.50` pass. Sang **MS5** (constrains). |
 | 2026-07-06 | C4·MS3 | ✅ **ĐÓNG MS3.** Mentor dựng scaffold (`total_actual_hours` Float compute store + `@api.depends('line_ids.actual_ot_hours')` + placeholder — trước đó CHƯA có). Học viên viết thân `sum(rec.line_ids.mapped('actual_ot_hours'))` + đưa lên form (readonly). Nghiệm thu pass 3 ca. Bài học: nhánh `if/else 0` THỪA (`sum([])==0`); ca thêm/xóa dòng pass → depends `line_ids.actual_ot_hours` ĐÃ ĐỦ. Sang **MS4** (giờ OT theo khoảng — timezone). |
 | 2026-07-06 | C4·MS2 | ✅ **ĐÓNG MS2.** Học viên viết thân `_compute_employee_custom_name` (ghép `"tên <dept>"`, bẫy phòng ban rỗng → `<Chưa có phòng ban>`, else `= False`) + đưa field lên form (cột phải, readonly). Nghiệm thu pass 3 ca. Review bắt 3 lỗi: else thiếu init biến, hardcode tên giả, format thiếu `< >`. Sang **MS3** (`total_actual_hours` — CHƯA có scaffold). |
 | 2026-06-29 | C4·MS2 | ▶️ Mở **MS2** (`employee_custom_name` = `Tên <Phòng ban>`). |

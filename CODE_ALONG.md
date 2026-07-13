@@ -31,7 +31,7 @@
 | 2. Models (3 model) | ✅ | — | field cơ bản; compute/tracking để dành C4/C6 |
 | 3. Views / Menu / Action | ✅ | 2026-06-29 | theo reference: gộp view 1 file, line tree inline; nghiệm thu pass |
 | 4. Compute / Onchange / Constrains | ✅ | 2026-07-06 | thử lửa #1 XONG · MS1–MS5 ✅ (compute store ×4 + constrains ×2) · nghiệm thu pass |
-| 5. Workflow + Mail | ⬜ | | |
+| 5. Workflow + Mail | 🔶 | | MS1 (sequence+create) ✅ · MS2 (6 button+action_*) ✅ · **MS3 mail ĐANG LÀM** (scaffold đã đặt, chờ học viên) |
 | 6. Wizard + Tracking | ⬜ | | |
 | 7. Security & Record Rules | ⬜ | | cần Phụ lục A trước khi test |
 | 8. OT Category theo thời gian | ⬜ | | **CHẬM LẠI** — bẫy timezone |
@@ -39,7 +39,9 @@
 | 10. Migration + Acceptance | ⬜ | | |
 | 11. Automated Testing | ⬜ | | |
 
-**👉 Đang ở:** ✅ **C4 HOÀN TẤT** (MS1–MS5 pass), sẵn sàng sang 🟢 **C5 — Workflow + Mail** (sequence + override create + 5 button state + 4 mail.template).
+**👉 Đang ở:** 🔶 **C5·MS3 — Mail.** MS1 (ir.sequence + override `create`) và MS2 (6 button + `action_*` + luật "submit ≤ 2 ngày") đã pass review. MS3 scaffold đã đặt xong (`data/mail_templates.xml` + 2 stub), **đang chờ học viên viết** `get_record_url()` → `_send_mail()` → nối 4 `action_*` → 3 template TODO.
+
+> ⚠️ **Luật giảng dạy (học viên yêu cầu 2026-07-10):** mở mỗi MS bằng khối **Concept** đầy đủ trước, rồi mới scaffold/code.
 
 ---
 
@@ -300,15 +302,58 @@
 
 </details>
 
-## CHƯƠNG 5 — Workflow + Mail ⬜
+## CHƯƠNG 5 — Workflow + Mail 🔶 ĐANG LÀM
 
-- [ ] Sequence `ot.request` (`data/ot_sequence.xml`) + override `create`; `copy=False` các field
-- [ ] Form: statusbar + 5 button (Submit/PM Approve/PM Reject/DL Approve/DL Reject/Reset)
-- [ ] Methods `action_*` (đổi state + đóng dấu thời gian + gửi mail) ⭐
-- [ ] 4 `mail.template` (`data/mail_templates.xml`) có link record
-- [ ] Helper `get_record_url()`
-- [ ] Gửi mail KHÔNG log chatter (`template.send_mail`)
+> ⚠️ **Luật mới từ 2026-07-10 (học viên yêu cầu):** mỗi MS phải mở bằng khối **Concept** đầy đủ (API là gì, chạy thế nào bên dưới, vì sao chọn nó thay cái khác) **TRƯỚC** khi đưa scaffold. Xong concept mới tới code. Vẫn giữ luật gốc: mentor KHÔNG code thay phần nghiệp vụ.
+
+- [x] **MS1** ✅ — `ir.sequence` (`data/ot_sequence.xml`, bọc `<data noupdate="1">`) + override `create()` → `name = OT/2026/00001`
+- [x] **MS2** ✅ — Form: 6 button workflow (`states="..."`) + 6 method `action_*` (đổi state + đóng dấu thời gian) + luật "submit ≤ 2 ngày" trong `action_submit`
+- [ ] **MS3** 🔶 **ĐANG LÀM** — Mail: `get_record_url()` + `_send_mail()` + 4 `mail.template`, gửi KHÔNG log chatter
+  - [x] Scaffold mentor: `data/mail_templates.xml` (template Submit viết đầy đủ làm mẫu + 3 TODO), 2 stub trong `ot_request.py`, khai manifest
+  - [ ] ⭐ Học viên: thân `get_record_url()` (dùng `ir.config_parameter` key `web.base.url`, nhớ `.sudo()`)
+  - [ ] ⭐ Học viên: thân `_send_mail(xml_id)` (`self.env.ref(...)` → `template.send_mail(id, force_send=True)`); **ngã rẽ:** loop hay `ensure_one()`?
+  - [ ] ⭐ Học viên: nối mail vào 4 `action_*` — gọi **SAU** `self.write(...)` (template đọc `object.state`)
+  - [ ] ⭐ Học viên: điền 3 template TODO (PM approve → DL + CC nhân viên; DL approve → nhân viên; Reject → nhân viên + lý do)
+  - [ ] **Ngã rẽ chưa chốt:** 2 nút reject dùng CHUNG 1 template hay tách 2? (khác nhau ở "ai từ chối" — lấy từ field nào?)
 - [ ] Nghiệm thu luồng thật (Phụ lục A)
+
+<details>
+<summary>📖 <b>Hướng dẫn mentor — C5</b></summary>
+
+### ✅ MS1 — ir.sequence + override create() — *XONG*
+**Scaffold mentor:** không có (học viên tự làm cả). **Học viên viết:** `data/ot_sequence.xml` + `create()` với pattern `vals.get('name','New') == 'New'`.
+> 🐞 Review bắt: `<record>` trần **không** có `noupdate="1"` → mỗi lần `-u ot_registration` Odoo ghi đè record, kéo `number_next` về 1 → mã đơn trùng **âm thầm** (`name` không có unique constraint). Fix: bọc `<data noupdate="1">`.
+> 🧠 `copy=False` trên `name` đã có sẵn từ C3 → duplicate đơn không kéo theo mã cũ.
+
+### ✅ MS2 — 6 button workflow — *XONG*
+**Học viên viết:** 6 `action_*` dùng `self.write({...})` + 6 `<button states="...">` trong `<header>`.
+> 🐞 Review bắt 3 lỗi: (1) `if dates > 0:` với `dates = mapped('from_date')` → **TypeError** (`list > int` không hợp lệ trong Python 3; Odoo 12 trả `datetime` object, không phải string). Đúng là `if dates:`. (2) `action_reset` chỉ xoá `submitted_at`, để sót `pm_action_at`/`dl_action_at` → dữ liệu nói dối. (3) `<record>` sequence thiếu `noupdate` (xem MS1).
+> 🧠 Chốt Q&A: (a) luật "≤ 2 ngày" ở `action_submit` chứ KHÔNG phải `@api.constrains` — bản nháp giữ được ngày cũ, chỉ chặn lúc *gửi*. (b) "Ngày phát sinh OT" = `min(line_ids.mapped('from_date'))` (dòng sớm nhất) + `timedelta(days=2)` = đúng 48h. Đơn có 1 dòng quá hạn → chặn **cả đơn**. Học viên đã chọn có ý thức. (c) Học viên tự yêu cầu chặn luôn **đơn không có dòng nào** → thêm nhánh raise.
+> 📌 **Nợ style (đã nói, học viên chưa sửa — không ép):** `if dates: ... else: raise` nên đảo thành guard `if not self.line_ids: raise` ở đầu hàm (bớt 1 cấp thụt lề); message `"Khong tao duoc OT Request..."` sai ngữ cảnh (đơn đã tạo rồi, nút tên là Submit); `action_submit` chưa `ensure_one()` → nếu sau này bấm hàng loạt từ list view, `self.line_ids` gộp dòng của mọi đơn → `min()` sai.
+
+### 🔶 MS3 — Mail (ĐANG LÀM)
+
+**🧠 Concept đã giảng (2026-07-10) — session sau đừng giảng lại, chỉ nhắc:**
+1. `mail.template` là **bản ghi dữ liệu** trong bảng `mail_template`, không phải cấu hình. Sửa được trên UI (Settings → Technical → Email → Templates). Không đặt `noupdate` để lúc học `-u` còn cập nhật được.
+2. `ref="model_ot_request"` — Odoo tự sinh external id cho mọi model theo công thức `model_` + `_name` thay `.` bằng `_`. `model_id` trỏ tới `ir.model` (bảng metadata Odoo tự mô tả chính nó).
+3. `${...}` là **Jinja2**, không phải f-string: Odoo dựng `SandboxedEnvironment` rồi đổi delimiter sang `${ }` (`mail/models/mail_template.py:85-88`). Sandbox chặn `import` + attribute `_`; gọi method công khai thì được → `${object.get_record_url()}` chạy.
+4. Biến có sẵn khi render (`mail_template.py:325-330`): **chỉ** `object` (record), `user` (`env.user`), `ctx`, `format_date`/`format_tz`/`format_amount`. KHÔNG có `env`, KHÔNG có `self`.
+5. Hai quirk: render ra chuỗi `"False"` → Odoo tự thay bằng chuỗi rỗng (`:341`) nên `email_to` rỗng sẽ gửi **im lặng**; render **nổ** → `UserError("Failed to render template...")` hiện ngay trên UI.
+6. `send_mail(res_id, force_send)` (`:502`): `ensure_one()` áp lên **template**, `res_id` là **một** int → đó là lý do `_send_mail` phải quyết loop hay `ensure_one()`. `force_send=False` → mail nằm chờ cron "Mail: Email Queue Manager", dev tưởng code hỏng.
+7. **Vì sao không log chatter:** `mail.mail` có `_inherits = {'mail.message': 'mail_message_id'}` (`mail_mail.py:27`) nên vẫn đẻ ra `mail.message`. NHƯNG chatter là **widget** đọc `message_ids` do `mail.thread` cấp; `ot.request` không kế thừa `mail.thread` + form không có chatter widget → message tồn tại trong DB mà không có đường hiển thị. Thoả README:52. **Đối chiếu:** `message_post_with_template()` sẽ vừa gửi vừa hiện chatter — đúng thứ đề bài cấm.
+8. `email_to`/`email_cc` là `Char` (chuỗi email, ngăn bằng dấu phẩy), khác hẳn `partner_ids` (M2m `res.partner`, đường đi của notification chuẩn và **có** đụng chatter). Nhân viên là `hr.employee` → địa chỉ lấy từ `work_email` (xác minh `hr/models/hr.py:186`).
+9. `web.base.url` nằm trong `ir.config_parameter` — bảng có tham số nhạy cảm nên nhân viên thường **không có quyền đọc**. Thiếu `.sudo()` → admin bấm thì chạy, nhân viên bấm thì `AccessError`. Cùng nguyên lý `.sudo()` đã dùng ở `_compute_pm_id` (C4·MS1).
+10. ⚠️ `auto_delete` mặc định **True** → gửi **thành công** thì Odoo **xoá** `mail.mail`, chỉ giữ lại khi `state='exception'` (`mail_mail.py:285`). Ngược trực giác lúc debug. Scaffold đã đặt `eval="False"` cho cả 4 template để soi được ở Technical → Emails.
+
+**Scaffold mentor (ĐÃ đặt):** `data/mail_templates.xml` (4 record; **Submit viết đầy đủ làm mẫu**, 3 cái còn lại `TODO`) · 2 stub `get_record_url()` + `_send_mail(xml_id)` trong `ot_request.py` (thân `TODO`/`pass`) · khai `data/mail_templates.xml` vào manifest.
+
+**⭐ Your Turn (thứ tự bắt buộc):** `get_record_url()` **trước** (template Submit đã gọi nó rồi) → `_send_mail()` → nối vào 4 `action_*` (sau `write`) → cuối cùng mới điền 3 template TODO.
+
+**Review sẽ hỏi:** (a) `_send_mail` chọn loop hay `ensure_one()`, và nó có nhất quán với `action_submit` không? (b) gọi mail trước `write` thì `${object.state}` in ra gì? (c) 2 nút reject: chung template hay tách? field nào cho biết "ai từ chối"? (d) `email_to` render rỗng thì chuyện gì xảy ra — có ai báo lỗi không?
+
+**Nghiệm thu MS3:** bấm Submit → Settings → Technical → Email → Emails phải thấy 1 mail mới, `To` = email PM, thân mail có link bấm được. Nếu KHÔNG thấy mail nào → lỗi ở `_send_mail`, không phải ở template.
+
+</details>
 
 ## CHƯƠNG 6 — Wizard + Tracking ⬜
 
@@ -362,6 +407,9 @@
 
 | Ngày | Chương/MS | Nội dung |
 |---|---|---|
+| 2026-07-10 | C5·MS3 | ▶️ **MỞ MS3 (mail).** Học viên yêu cầu **giảng concept đầy đủ trước khi code** → thành luật cho mọi MS về sau (ghi ở đầu C5 + memory). Mentor giảng 10 điểm (mail.template là data; external id `model_ot_request`; Jinja2 `${ }` sandboxed; chỉ có `object`/`user`/`ctx`; quirk `"False"`→rỗng & UserError khi render nổ; `send_mail` ensure_one trên *template*, res_id là 1 int; không log chatter vì `ot.request` thiếu `mail.thread` dù `mail.mail` `_inherits` `mail.message`; `email_to` là Char ≠ `partner_ids`; `.sudo()` đọc `web.base.url`; `auto_delete=True` xoá mail sau khi gửi **thành công**). Mentor dựng scaffold: `data/mail_templates.xml` (Submit đầy đủ + 3 TODO, `auto_delete=False` để debug) + stub `get_record_url()`/`_send_mail()` + khai manifest. **Chờ học viên viết.** |
+| 2026-07-10 | C5·MS2 | ✅ **ĐÓNG MS2.** Học viên viết 6 `action_*` (`self.write` đổi state + đóng dấu `submitted_at`/`pm_action_at`/`dl_action_at`) + 6 `<button states="...">`. Review bắt lỗi chặn: `if dates > 0:` → **TypeError** (`mapped('from_date')` trả list `datetime`, Odoo 12 không còn string) → sửa `if dates:`. Bắt thêm: `action_reset` sót `pm_action_at`/`dl_action_at`. Học viên **tự yêu cầu** chặn luôn đơn không có dòng nào → thêm nhánh raise. Nợ style chưa sửa (guard đảo, message sai ngữ cảnh, thiếu `ensure_one`). Sang **MS3** (mail). |
+| 2026-07-10 | C5·MS1 | ✅ **ĐÓNG MS1.** Học viên viết `data/ot_sequence.xml` + override `create()` (`vals.get('name','New') == 'New'` → `next_by_code`). Review bắt: `<record>` thiếu `<data noupdate="1">` → mỗi lần `-u` reset `number_next` về 1 → **mã đơn trùng âm thầm** (`name` không unique). Đã fix. |
 | 2026-07-06 | C4 | ✅ **ĐÓNG C4 (MS5 + nghiệm thu).** Mentor dựng scaffold 2 `@api.constrains` + import `ValidationError`. Học viên viết `_check_date_order` (`rec.to_date <= rec.from_date`) + `_check_no_overlap` (duyệt `request_id.line_ids`, loại self, overlap `<`/`<`). Review bắt: quên `rec.` → NameError, `pass` thừa. Đính chính (c): constrain chạy sau ghi DB nên id thật → `.id` không lỗi; NewId là của onchange. Nghiệm thu pass 3 ca. **C4 hoàn tất → sang C5 (workflow+mail).** |
 | 2026-07-06 | C4·MS4 | ✅ **ĐÓNG MS4.** Chốt ngã rẽ #1 = **compute store** (không onchange). Mentor dựng scaffold (`ot_registration_hours` compute store + `@api.depends('from_date','to_date')`). Học viên viết `(to_date-from_date).total_seconds()/3600.0` + guard. Review bắt 3 lỗi: `timedelta` chưa import, phép đổi ngoài `if` làm else vỡ, thiếu `/3600` (giây≠giờ). Chốt: **duration KHÔNG cần tz** (bẫy tz để C8); negative hours để **MS5 constrain**, không xử ở compute. `actual_ot_hours` giữ nhập tay. Nghiệm thu `19:00→21:30 = 2.50` pass. Sang **MS5** (constrains). |
 | 2026-07-06 | C4·MS3 | ✅ **ĐÓNG MS3.** Mentor dựng scaffold (`total_actual_hours` Float compute store + `@api.depends('line_ids.actual_ot_hours')` + placeholder — trước đó CHƯA có). Học viên viết thân `sum(rec.line_ids.mapped('actual_ot_hours'))` + đưa lên form (readonly). Nghiệm thu pass 3 ca. Bài học: nhánh `if/else 0` THỪA (`sum([])==0`); ca thêm/xóa dòng pass → depends `line_ids.actual_ot_hours` ĐÃ ĐỦ. Sang **MS4** (giờ OT theo khoảng — timezone). |

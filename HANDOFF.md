@@ -5,12 +5,13 @@
 
 ---
 
-## 📸 Snapshot (cập nhật: 2026-07-06)
+## 📸 Snapshot (cập nhật: 2026-07-10)
 
 - **Project:** module Odoo 12 `ot.registration` — quản lý đăng ký OT. Spec: [README.md](README.md). Giáo trình: [Roadmap.md](Roadmap.md).
 - **Chế độ làm việc:** CODE-ALONG (mentor đưa concept + skeleton, học viên hoàn thiện logic; mentor KHÔNG code thay phần nghiệp vụ). Luật + tiến độ đầy đủ ở [CODE_ALONG.md](CODE_ALONG.md).
+- **⚠️ LUẬT MỚI (học viên yêu cầu 2026-07-10):** mỗi milestone phải **giảng khối Concept đầy đủ TRƯỚC** khi đưa scaffold hoặc để học viên code — nói rõ *API là gì, chạy thế nào bên dưới, vì sao chọn nó thay cái khác*, không chỉ liệt kê "làm gì".
 - **Convention đã chốt:** **theo BẢN THAM KHẢO** `ot_registration/ot_registration/` (state `to_approve_pm/to_approve_dl/reject`, line `from_date/to_date`, gộp view 1 file + line tree inline). Bảng đối chiếu: mục "🎯 Bản tham khảo" trong CODE_ALONG.
-- **Đang ở:** ✅ **C4 HOÀN TẤT** (thử lửa #1 xong). MS1–MS5 pass: pm_id/dl_id + employee_custom_name + total_actual_hours + ot_registration_hours (compute store ×4) + 2 constrains (`_check_date_order`, `_check_no_overlap`). Sẵn sàng sang 🟢 **C5 — Workflow + Mail**. Plan chi tiết ở [CODE_ALONG.md](CODE_ALONG.md) §C5.
+- **Đang ở:** 🔶 **C5·MS3 — Mail** (xem "⏭️ Việc tiếp theo"). C4 ✅ đóng trọn (compute store ×4 + 2 constrains). C5·MS1 (ir.sequence + override `create`) ✅ và C5·MS2 (6 button + `action_*` + luật "submit ≤ 2 ngày") ✅ đã pass review.
 - **📌 Bài học chốt MS4 (đừng quên ở C8):** tính **duration** (số giờ giữa 2 mốc) **KHÔNG cần timezone** — hiệu 2 mốc UTC = hiệu 2 mốc local. Bẫy tz THẬT nằm ở **C8** khi lấy `.hour/.weekday()` để phân loại category. MS4 đã bỏ hẳn pytz.
 
 ---
@@ -44,17 +45,25 @@ Get-NetTCPConnection -LocalPort 8069 -State Listen | Select OwningProcess
 
 ---
 
-## ⏭️ VIỆC TIẾP THEO — C5 Workflow + Mail (bắt đầu session sau)
+## ⏭️ VIỆC TIẾP THEO — C5·MS3 Mail (học viên đang viết)
 
-**C4 ✅ ĐÓNG TRỌN** — compute store ×4 (pm_id/dl_id, employee_custom_name, total_actual_hours, ot_registration_hours) + 2 constrains (`_check_date_order` = `to_date > from_date`; `_check_no_overlap` = chống đè giờ trong cùng đơn, formula `<`/`<`, loại self). Nghiệm thu pass.
+**Đã xong:** C4 trọn vẹn · C5·MS1 `ir.sequence` + override `create()` (đã fix `<data noupdate="1">`) · C5·MS2 6 button workflow + 6 `action_*` + luật "submit ≤ 2 ngày" + chặn đơn rỗng.
 
-**C5 — Workflow + Mail.** ⚠️ **Chưa có scaffold.** Checklist ở [CODE_ALONG.md](CODE_ALONG.md) §C5:
-- `ir.sequence` (`data/ot_sequence.xml`) + **override `create()`** → thay `name` default `'New'` bằng `OT/2026/00001` (xem nợ kỹ thuật bên dưới); nhớ `copy=False`.
-- Form: statusbar + **5 button** workflow (Submit / PM Approve / PM Reject / DL Approve / DL Reject / Reset).
-- Methods `action_*`: đổi state + đóng dấu thời gian (`submitted_at`/`pm_action_at`/`dl_action_at` — 3 field này ĐANG có sẵn, C5 mới dùng) + gửi mail.
-- ⭐ **Luật "submit ≤ 2 ngày"** đặt ở `action_submit` (KHÔNG phải constrain) — bản nháp giữ ngày cũ, chỉ chặn lúc *gửi*.
-- 4 `mail.template` (`data/mail_templates.xml`) + helper `get_record_url()`; gửi mail KHÔNG log chatter.
-- 🔀 Ngã rẽ chốt đầu C5: chuỗi state hiện là `draft → to_approve_pm → to_approve_dl → approved / reject` — map 5 button vào đúng các bước này.
+**Mentor ĐÃ dựng scaffold MS3, học viên CHƯA viết:**
+- `data/mail_templates.xml` — 4 record `mail.template`; **Submit viết đầy đủ làm mẫu**, 3 cái còn lại để `TODO`. Đã khai vào manifest. Đặt `auto_delete="False"` cho dễ debug.
+- `models/ot_request.py` — 2 stub: `get_record_url()` (thân `return ''`) và `_send_mail(xml_id)` (thân `pass`).
+
+**⭐ Thứ tự học viên phải làm (đã dặn):**
+1. `get_record_url()` **trước tiên** — template Submit đã gọi nó rồi. Dùng `ir.config_parameter` key `web.base.url`, **nhớ `.sudo()`**.
+2. `_send_mail(xml_id)` — `self.env.ref('ot_registration.<id>')` → `template.send_mail(<res_id>, force_send=True)`. **Ngã rẽ chưa chốt:** loop hay `ensure_one()`?
+3. Nối vào 4 `action_*` — gọi mail **SAU** `self.write(...)` (template đọc `object.state`).
+4. Điền 3 template TODO. **Ngã rẽ chưa chốt:** 2 nút reject dùng chung 1 template hay tách 2? (khác ở "ai từ chối" — lấy từ field nào?)
+
+**🧠 Concept MS3 ĐÃ giảng đủ 10 điểm** (mail.template là data · external id `model_ot_request` · Jinja2 `${ }` sandboxed · chỉ có `object`/`user`/`ctx` · quirk `"False"`→rỗng & `UserError` khi render nổ · `send_mail` `ensure_one()` áp lên *template* và `res_id` là 1 int · **không log chatter vì `ot.request` thiếu `mail.thread`**, dù `mail.mail` `_inherits` `mail.message` · `email_to` là `Char` ≠ `partner_ids` · `.sudo()` để đọc `web.base.url` · `auto_delete=True` xoá mail sau khi gửi **thành công**). Chi tiết + số dòng source: [CODE_ALONG.md](CODE_ALONG.md) §C5·MS3. **Session sau đừng giảng lại, chỉ nhắc.**
+
+**Nghiệm thu MS3:** bấm Submit → Settings → Technical → Email → Emails thấy mail mới, `To` = email PM, thân có link bấm được. Không thấy mail nào ⇒ lỗi ở `_send_mail`, không phải template.
+
+**📌 Nợ style C5·MS2 (đã nói, học viên chưa sửa — KHÔNG ép):** `if dates: ... else: raise` nên đảo thành guard `if not self.line_ids: raise` đầu hàm · message `"Khong tao duoc OT Request..."` sai ngữ cảnh (đơn đã tạo, nút tên Submit) · `action_submit` thiếu `ensure_one()` → bấm hàng loạt từ list view sẽ gộp `line_ids` mọi đơn, `min()` sai.
 
 > 🩺 **Lưu ý IDE:** language server hay báo nhầm "Could not find model 'hr.employee'" / "field 'department_id'" — **false positive** (chưa index module `hr`). Đã xác minh tận source Odoo 12: `project.py:193` `user_id`(PM), `hr.py:191` `parent_id`(Manager), `hr.py:190` `department_id`. Đừng đổi code theo cảnh báo này.
 
@@ -70,9 +79,10 @@ Get-NetTCPConnection -LocalPort 8069 -State Listen | Select OwningProcess
 
 ## ⚠️ NỢ KỸ THUẬT / GHI CHÚ (đừng quên ở chương sau)
 
-- `name` đang `default='New'` tạm → **C5** thay bằng `ir.sequence` (`OT/2026/00001`) trong `create()`.
+- ~~`name` đang `default='New'` tạm → C5 thay bằng `ir.sequence`~~ ✅ **XONG ở C5·MS1** (`create()` gọi `next_by_code('ot.request')`; `copy=False` đã có sẵn).
+- ⚠️ **Mọi `<record>` data không được ghi đè khi `-u` phải bọc `<data noupdate="1">`** — bài học từ `ir.sequence` (không có nó, `number_next` reset về 1 mỗi lần update → mã đơn trùng âm thầm vì `name` không unique). Áp dụng lại ở **C8** khi seed `ot_category_data.xml`. Ngược lại, `mail.template` thì CỐ Ý không đặt `noupdate` để lúc học `-u` còn cập nhật được.
 - ~~`pm_id`/`dl_id` đang `res.users` → C4 đổi sang `hr.employee` + compute~~ ✅ **XONG ở MS1** (`dl_id=employee.parent_id`, `pm_id` từ `project.user_id`).
-- 3 field `submitted_at/pm_action_at/dl_action_at` (kiểu Roadmap) reference không dùng — để đó, đừng đưa lên form.
+- ~~3 field `submitted_at/pm_action_at/dl_action_at` reference không dùng~~ ✅ **C5·MS2 đã dùng** (mỗi `action_*` đóng dấu 1 field; `action_reset` xoá cả 3). Vẫn KHÔNG đưa lên form.
 - `ot_category_views.xml` còn là vỏ rỗng trong manifest — cân nhắc gỡ (MS5 đã bỏ).
 - Bug trong reference (đừng chép mù): `ot_request_line.py:74` so recordset==id; `:150` external id sai chính tả `cacot_cat_unknown`.
 

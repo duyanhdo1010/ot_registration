@@ -7,6 +7,7 @@
     'data': [
         'security/ir.model.access.csv',
         'data/ot_sequence.xml',
+        'data/mail_templates.xml',
         'views/ot_category_views.xml',
         'views/ot_request_views.xml',
     ],

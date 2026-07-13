@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <!-- ============================================================
+       C5 · MS3 — 4 mail.template cho luồng duyệt OT.
+
+       Thân mail = Jinja2, Odoo render TRƯỚC khi gửi:
+         ${object.xxx}  -> object CHÍNH LÀ record ot.request truyền vào send_mail()
+         ${user.name}   -> user đang đăng nhập (env.user)
+       Gọi được cả method: ${object.get_record_url()}
+
+       model_id: ref="model_ot_request" — Odoo tự sinh external id dạng
+       "model_<tên model, thay . bằng _>" cho mọi model trong module.
+       ============================================================ -->
+
+  <!-- ✅ MẪU HOÀN CHỈNH (mentor viết) — Submit: nhân viên -> PM.
+       Bước này KHÔNG cần CC nhân viên: chính họ là người gửi. -->
+  <record id="mail_template_ot_submit" model="mail.template">
+    <field name="name">OT Request: Submitted to PM</field>
+    <field name="model_id" ref="model_ot_request"/>
+    <field name="subject">[OT] ${object.name} - ${object.employee_id.name} can ban duyet</field>
+    <field name="email_from">${object.employee_id.work_email or user.email}</field>
+    <field name="email_to">${object.pm_id.work_email}</field>
+    <!-- auto_delete=False: giữ lại mail.mail sau khi gửi để bạn soi được
+         ở Settings > Technical > Email > Emails. Mặc định của Odoo là True
+         (gửi xong xoá luôn) -> lúc học sẽ tưởng mail không hề được tạo. -->
+    <field name="auto_delete" eval="False"/>
+    <field name="body_html"><![CDATA[
+      <p>Xin chào ${object.pm_id.name},</p>
+      <p>
+        Nhân viên <strong>${object.employee_id.name}</strong> vừa gửi đơn đăng ký OT
+        <strong>${object.name}</strong> thuộc dự án <strong>${object.project_id.name}</strong>.
+      </p>
+      <p>Tổng giờ OT thực tế: <strong>${object.total_actual_hours}</strong> giờ.</p>
+      <p>
+        <a href="${object.get_record_url()}"
+           style="padding:8px 16px;background:#875A7B;color:#fff;text-decoration:none;border-radius:3px;">
+          Mở đơn để duyệt
+        </a>
+      </p>
+    ]]></field>
+  </record>
+
+  <!-- 📝 TODO(bạn) — PM approve: -> DL, CC nhân viên (README bắt buộc CC).
+       Nội dung nên nói rõ "PM đã duyệt, cần bạn xác nhận" + link. -->
+  <record id="mail_template_ot_pm_approve" model="mail.template">
+    <field name="name">OT Request: PM approved, waiting DL</field>
+    <field name="model_id" ref="model_ot_request"/>
+    <field name="subject">TODO</field>
+    <field name="email_from">TODO</field>
+    <field name="email_to">TODO</field>
+    <field name="email_cc">TODO</field>
+    <!-- auto_delete=False: giữ lại mail.mail sau khi gửi để bạn soi được
+         ở Settings > Technical > Email > Emails. Mặc định của Odoo là True
+         (gửi xong xoá luôn) -> lúc học sẽ tưởng mail không hề được tạo. -->
+    <field name="auto_delete" eval="False"/>
+    <field name="body_html"><![CDATA[
+      TODO
+    ]]></field>
+  </record>
+
+  <!-- 📝 TODO(bạn) — DL approve: -> nhân viên. Đơn duyệt xong, báo tin + link. -->
+  <record id="mail_template_ot_dl_approve" model="mail.template">
+    <field name="name">OT Request: Approved</field>
+    <field name="model_id" ref="model_ot_request"/>
+    <field name="subject">TODO</field>
+    <field name="email_from">TODO</field>
+    <field name="email_to">TODO</field>
+    <!-- auto_delete=False: giữ lại mail.mail sau khi gửi để bạn soi được
+         ở Settings > Technical > Email > Emails. Mặc định của Odoo là True
+         (gửi xong xoá luôn) -> lúc học sẽ tưởng mail không hề được tạo. -->
+    <field name="auto_delete" eval="False"/>
+    <field name="body_html"><![CDATA[
+      TODO
+    ]]></field>
+  </record>
+
+  <!-- 📝 TODO(bạn) — Reject (PM hoặc DL): -> nhân viên, KÈM LÝ DO.
+       ⚠️ Ngã rẽ: dùng CHUNG 1 template cho cả 2 nút reject, hay tách 2?
+          - state sau reject giống nhau, nội dung gần như giống nhau
+          - khác nhau ở "AI từ chối" -> field nào trên record cho bạn biết điều đó?
+       ${object.reject_reason} hiện luôn rỗng — wizard C6 mới ghi vào field này.
+       Cứ đưa vào mail trước, sang C6 nó tự có nội dung. -->
+  <record id="mail_template_ot_reject" model="mail.template">
+    <field name="name">OT Request: Rejected</field>
+    <field name="model_id" ref="model_ot_request"/>
+    <field name="subject">TODO</field>
+    <field name="email_from">TODO</field>
+    <field name="email_to">TODO</field>
+    <!-- auto_delete=False: giữ lại mail.mail sau khi gửi để bạn soi được
+         ở Settings > Technical > Email > Emails. Mặc định của Odoo là True
+         (gửi xong xoá luôn) -> lúc học sẽ tưởng mail không hề được tạo. -->
+    <field name="auto_delete" eval="False"/>
+    <field name="body_html"><![CDATA[
+      TODO
+    ]]></field>
+  </record>
+
+</odoo>

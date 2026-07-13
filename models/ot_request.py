@@ -103,6 +103,33 @@ class OtRequest(models.Model):
             'pm_action_at': False
         })
 
+    # ============================================================
+    # C5 · MS3 — Mail (scaffold mentor; thân hàm bạn viết)
+    # ============================================================
+    def get_record_url(self):
+        """Link trực tiếp tới form của record này (mail.template gọi hàm này).
+
+        README yêu cầu dạng:  <base_url>/web#id=<id>&model=ot.request&view_type=form
+        Gợi ý: base_url nằm ở ir.config_parameter, key 'web.base.url'.
+               Đọc bằng self.env['ir.config_parameter'].sudo().get_param(...)
+               — vì sao phải .sudo()? (nhân viên thường không có quyền đọc bảng này)
+        """
+        # TODO(bạn): dựng chuỗi URL rồi return
+        return ''
+
+    def _send_mail(self, xml_id):
+        """Gửi 1 mail.template NGAY, không log chatter.
+
+        - self.env.ref('ot_registration.<external_id>') -> lấy record mail.template
+        - template.send_mail(<res_id>, force_send=True)  -> tạo mail.mail & gửi luôn
+          (force_send=False thì mail nằm chờ cron, dev sẽ tưởng là hỏng)
+
+        ⚠️ send_mail nhận MỘT res_id, không nhận recordset. Nếu self có nhiều
+           record thì sao? -> quyết định: loop, hay ensure_one()?
+        """
+        # TODO(bạn): lấy template rồi gửi
+        pass
+
     # Gán pm và dl khi tạo
     @api.depends('project_id')
     def _compute_pm_id(self):

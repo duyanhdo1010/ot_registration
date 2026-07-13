@@ -51,7 +51,13 @@
     <field name="arch" type="xml">
       <form string="OT Registration">
         <header>
-          <!-- 🔜 C5: 5 nút workflow (Submit/PM/DL/Reject/Reset) -->
+          <!-- C5·MS2: nút workflow — states="..." tự ẩn/hiện theo state -->
+          <button name="action_submit"     type="object" string="Submit"          states="draft"         class="oe_highlight"/>
+          <button name="action_pm_approve" type="object" string="PM Approve"      states="to_approve_pm" class="oe_highlight"/>
+          <button name="action_pm_reject"  type="object" string="PM Reject"       states="to_approve_pm"/>
+          <button name="action_dl_approve" type="object" string="DL Approve"      states="to_approve_dl" class="oe_highlight"/>
+          <button name="action_dl_reject"  type="object" string="DL Reject"       states="to_approve_dl"/>
+          <button name="action_reset"      type="object" string="Reset to Draft"  states="reject"/>
           <field name="state" widget="statusbar"
                 statusbar_visible="draft,to_approve_pm,to_approve_dl,approved,reject"/>
         </header>

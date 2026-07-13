@@ -1,5 +1,6 @@
 from odoo import models, fields, api
-
+from datetime import timedelta
+from odoo.exceptions import ValidationError
 
 class OtRequest(models.Model):
     _name = 'ot.request'
@@ -34,6 +35,73 @@ class OtRequest(models.Model):
     total_actual_hours = fields.Float(
         string='Total Actual OT Hours',
         compute='_compute_total_actual_hours', store=True)
+
+    # ============================================================
+    # C5 · MS1 — override create(): sinh name từ ir.sequence
+    # ============================================================
+    @api.model
+    def create(self, vals):
+        if vals.get('name', 'New') == 'New':
+            vals['name'] = self.env['ir.sequence'].next_by_code('ot.request')
+        return super(OtRequest, self).create(vals)
+
+    # ============================================================
+    # C5 · MS2 — workflow: mỗi nút đổi state + đóng dấu thời gian
+    #   (self là record đang mở; dùng self.write({...}))
+    # ============================================================
+    def action_submit(self):
+        # ⭐ draft -> to_approve_pm; đóng dấu submitted_at = fields.Datetime.now()
+        #   + Luật "submit ≤ 2 ngày kể từ ngày phát sinh OT":
+        #     nếu quá hạn -> raise ValidationError (cần import ở đầu file)
+        #     👉 ngã rẽ: "ngày phát sinh OT" lấy từ đâu? (line.from_date sớm nhất?)
+        #        -> mình bàn trước khi bạn code phần check này.
+        dates = self.line_ids.mapped('from_date')
+        if dates:
+            oldest = min(dates)
+            if fields.Datetime.now() - oldest > timedelta(days=2):
+                raise ValidationError("Khong tao duoc OT Request neu qua 2 ngay")
+        else:
+            raise ValidationError("Khong tao duoc OT Request neu khong co thong tin thoi gian OT")
+        self.write({
+            'state': 'to_approve_pm',                 # đổi state (mũi tên)
+            'submitted_at': fields.Datetime.now(),    # đóng dấu thời gian
+        })
+
+    def action_pm_approve(self):
+        # ⭐ to_approve_pm -> to_approve_dl; đóng dấu pm_action_at
+        self.write({
+            'state': 'to_approve_dl',                 # đổi state (mũi tên)
+            'pm_action_at': fields.Datetime.now(),    # đóng dấu thời gian
+        })
+
+    def action_pm_reject(self):
+        # ⭐ to_approve_pm -> reject; đóng dấu pm_action_at
+        #   (lý do từ chối: C5 chưa nhập, để wizard C6)
+        self.write({
+            'state': 'reject',                 # đổi state (mũi tên)
+            'pm_action_at': fields.Datetime.now(),    # đóng dấu thời gian
+        })
+
+    def action_dl_approve(self):
+        # ⭐ to_approve_dl -> approved; đóng dấu dl_action_at
+        self.write({
+            'state': 'approved',                 # đổi state (mũi tên)
+            'dl_action_at': fields.Datetime.now(),    # đóng dấu thời gian
+        })
+
+    def action_dl_reject(self):
+        self.write({
+            'state': 'reject',                 # đổi state (mũi tên)
+            'dl_action_at': fields.Datetime.now(),    # đóng dấu thời gian
+        })
+
+    def action_reset(self):
+        self.write({
+            'state': 'draft',                 # đổi state (mũi tên)
+            'submitted_at': False,    # đóng dấu thời gian
+            'dl_action_at': False,
+            'pm_action_at': False
+        })
 
     # Gán pm và dl khi tạo
     @api.depends('project_id')

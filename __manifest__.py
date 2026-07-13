@@ -6,6 +6,7 @@
     'depends': ['base', 'mail', 'hr', 'project'],
     'data': [
         'security/ir.model.access.csv',
+        'data/ot_sequence.xml',
         'views/ot_category_views.xml',
         'views/ot_request_views.xml',
     ],

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <!-- ir.sequence: bộ đánh số cho ot.request.
+       Kết quả: OT/2026/00001, OT/2026/00002, ...
+       - code:    "tên gọi" để code Python gọi qua next_by_code('ot.request')
+       - prefix:  tiền tố; %(year)s = năm hiện tại (Odoo tự thay)
+       - padding: số chữ số, đệm 0 -> 5 => 00001
+  -->
+  <data noupdate="1">  
+    <record id="seq_ot_request" model="ir.sequence">
+      <field name="name">OT Request Sequence</field>
+      <field name="code">ot.request</field>
+      <field name="prefix">OT/%(year)s/</field>
+      <field name="padding">5</field>
+      <field name="number_next">1</field>
+      <field name="number_increment">1</field>
+    </record>
+  </data>
+</odoo>
